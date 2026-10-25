@@ -33,10 +33,9 @@ const CATEGORY_MAP = {
   trending:     "Trending",
   wholesome:    "Wholesome",
   gaming:       "Gaming",
-  relatable:    "Funny",
-  school:       "School",
+  relatable:    "Relatable",
+  funny:        "Funny",
   tech:         "Coding",
-  relationship: "Relationship",
 };
 
 export default function CreateScreen() {

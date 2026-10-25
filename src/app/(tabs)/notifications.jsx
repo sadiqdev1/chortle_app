@@ -19,6 +19,7 @@ import {
   BookmarkSimple,
   UserPlus,
   SmileyXEyes,
+  UserIcon,
 } from "phosphor-react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { Fonts, Radius } from "../../constants/theme";
@@ -147,7 +148,8 @@ function NotificationRow({ item, onPress, colors, isDark, index }) {
                 justifyContent: "center",
               }}
             >
-              <Text style={{ fontSize: 20 }}>👤</Text>
+              {/* <Text style={{ fontSize: 20 }}>👤</Text> */}
+              <UserIcon size={22} color={colors.textMuted}></UserIcon>
             </View>
           )}
 

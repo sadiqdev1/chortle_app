@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { MagnifyingGlass, X, UserCircle } from "phosphor-react-native";
+import { MagnifyingGlass, X, UserCircle, UserIcon } from "phosphor-react-native";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import PostCard from "../../components/PostCard";
 import { CATEGORIES, Fonts, Radius } from "../../constants/theme";
@@ -21,12 +21,6 @@ import { usePosts } from "../../hooks/usePosts";
 import { useSearchUsers } from "../../hooks/useProfile";
 
 const DEBOUNCE_MS = 350;
-
-const TAG_EMOJI = {
-  trending: "🔥", wholesome: "🥹", dark: "💀", gaming: "🎮",
-  relatable: "😂", animals: "🐾", political: "🗳️", school: "🎓",
-  tech: "💻", relationship: "❤️",
-};
 
 /* ── User result row ──────────────────────────────────────── */
 function UserRow({ user, colors }) {
@@ -40,7 +34,8 @@ function UserRow({ user, colors }) {
         <Image source={{ uri: user.avatar }} style={{ width: 44, height: 44, borderRadius: 22 }} />
       ) : (
         <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.bgCard, alignItems: "center", justifyContent: "center" }}>
-          <UserCircle size={28} color={colors.textMuted} weight="duotone" />
+          {/* <UserCircle size={28} color={colors.textMuted} weight="duotone" /> */}
+          <UserIcon size={22} color={colors.textMuted}></UserIcon>
         </View>
       )}
       <View style={{ flex: 1 }}>
@@ -230,7 +225,7 @@ export default function SearchScreen() {
                     activeOpacity={0.7}
                     style={{ flexDirection: "row", alignItems: "center", gap: 6, borderRadius: Radius.full, paddingVertical: 10, paddingHorizontal: 16, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.bgCard }}
                   >
-                    <Text style={{ fontSize: 14 }}>{TAG_EMOJI[c.id] ?? "🏷️"}</Text>
+
                     <Text style={{ fontFamily: Fonts.semiBold, fontSize: 13, color: colors.textPrimary }}>{c.label}</Text>
                   </TouchableOpacity>
                 </Animated.View>

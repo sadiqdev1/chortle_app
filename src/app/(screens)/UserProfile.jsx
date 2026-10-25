@@ -183,43 +183,7 @@ export default function UserProfileScreen() {
           )}
         </View>
 
-        {/* Follow / Edit button */}
-        {!isOwnProfile && (
-          <View style={styles.actionRow}>
-            <TouchableOpacity
-              onPress={() => toggleFollow()}
-              disabled={followPending}
-              style={[
-                styles.followBtn,
-                {
-                  backgroundColor: profile.is_following ? "transparent" : colors.accent,
-                  borderColor: profile.is_following ? colors.border : colors.accent,
-                },
-              ]}
-            >
-              {followPending ? (
-                <ActivityIndicator size="small" color={profile.is_following ? colors.accent : "#fff"} />
-              ) : (
-                <>
-                  {profile.is_following
-                    ? <UserMinus size={16} color={colors.textPrimary} weight="regular" />
-                    : <UserPlus size={16} color="#FFFFFF" weight="bold" />}
-                  <Text
-                    style={[
-                      styles.followBtnText,
-                      {
-                        fontFamily: Fonts.semiBold,
-                        color: profile.is_following ? colors.textPrimary : "#FFFFFF",
-                      },
-                    ]}
-                  >
-                    {profile.is_following ? "Following" : "Follow"}
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
+       
 
         {isOwnProfile && (
           <View style={styles.actionRow}>
@@ -243,7 +207,42 @@ export default function UserProfileScreen() {
             <View style={[styles.verifiedSmall, { backgroundColor: colors.accent }]}>
               <Check size={10} color="#FFFFFF" weight="bold" />
             </View>
-          )}
+
+
+          )}   
+          
+           {/* Follow / Edit button */}
+        {!isOwnProfile && (
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              onPress={() => toggleFollow()}
+              disabled={followPending}
+              style={[
+                styles.followBtn,
+                {
+                  backgroundColor: profile.is_following ? "transparent" : colors.accent,
+                  borderColor: profile.is_following ? colors.border : colors.accent,
+                },
+              ]}
+            >
+              {(
+                <>
+                  <Text
+                    style={[
+                      styles.followBtnText,
+                      {
+                        fontFamily: Fonts.semiBold,
+                        color: profile.is_following ? colors.textPrimary : "#FFFFFF",
+                      },
+                    ]}
+                  >
+                    {profile.is_following ? "Following" : "Follow"}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
         </View>
 
         <Text style={[styles.username, { color: colors.textMuted, fontFamily: Fonts.regular }]}>
@@ -276,7 +275,7 @@ export default function UserProfileScreen() {
           ) : null}
         </View>
 
-        {/* Stats */}
+        {/* Stats
         <View style={[styles.statsRow, { borderTopColor: colors.border, borderBottomColor: colors.border }]}>
           {[
             { value: profile.memes_count ?? memes.length, label: "Memes" },
@@ -292,7 +291,32 @@ export default function UserProfileScreen() {
               </Text>
             </View>
           ))}
-        </View>
+        </View> */}
+
+                {/* Followers / Following */}
+                <View style={styles.followRow}>
+                  <Pressable>
+                    <Text style={[styles.followNum, { color: colors.textPrimary, fontFamily: Fonts.bold }]}>
+                      {profile?.following_count ?? 0}{" "}
+                      <Text style={[styles.followLabel, { color: colors.textMuted, fontFamily: Fonts.regular }]}>
+                        Following
+                      </Text>
+                    </Text>
+                  </Pressable>
+        
+                  <Pressable>
+                    <Text style={[styles.followNum, { color: colors.textPrimary, fontFamily: Fonts.bold }]}>
+                      {profile?.followers_count != null
+                        ? profile.followers_count >= 1000
+                          ? `${(profile.followers_count / 1000).toFixed(1)}K`
+                          : profile.followers_count
+                        : 0}{" "}
+                      <Text style={[styles.followLabel, { color: colors.textMuted, fontFamily: Fonts.regular }]}>
+                        Followers
+                      </Text>
+                    </Text>
+                  </Pressable>
+                </View>
       </View>
 
       {/* Tabs */}
@@ -435,7 +459,6 @@ const styles = StyleSheet.create({
   actionRow: {
     position: "absolute",
     right: 20,
-    top: 16,
     flexDirection: "row",
     gap: 8,
   },
@@ -470,17 +493,17 @@ const styles = StyleSheet.create({
   metaItem: { flexDirection: "row", alignItems: "center", gap: 5 },
   metaText: { fontSize: 13 },
 
-  statsRow: {
+  followRow: {
     flexDirection: "row",
-    marginTop: 20,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    marginBottom: 4,
+    gap: 20,
+    marginTop: 16,
   },
-  stat:      { flex: 1, alignItems: "center" },
-  statValue: { fontSize: 18, letterSpacing: -0.2 },
-  statLabel: { fontSize: 12, marginTop: 2 },
+  followNum: {
+    fontSize: 15,
+  },
+  followLabel: {
+    fontSize: 15,
+  },
 
   // Tabs
   tabsBar:     { height: 52, flexDirection: "row", borderBottomWidth: 1 },

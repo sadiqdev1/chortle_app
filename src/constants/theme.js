@@ -164,14 +164,12 @@ export const Shadow = {
 // ── Content taxonomies ───────────────────────────────────────
 // Humor tags — replaces the old blog CATEGORIES entirely.
 export const CATEGORIES = [
-  { id: "all",       label: "All" },
   { id: "trending",  label: "Trending" },
-  { id: "wholesome", label: "Wholesome" },
-  { id: "dark",      label: "Dark" },
-  { id: "gaming",    label: "Gaming" },
+  { id: "funny", label: "Funny" },
   { id: "relatable", label: "Relatable" },
-  { id: "animals",   label: "Animals" },
-  { id: "political", label: "Political" },
+  { id: "gaming",    label: "Gaming" },
+  { id: "wholesome", label: "Wholesome" },
+  { id: "tech",   label: "Coding" },
 ];
 
 // Reaction set — matches the backend enum + UI reaction IDs.

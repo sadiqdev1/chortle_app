@@ -40,6 +40,7 @@ import {
   CaretDown,
   CaretUp,
   SealCheckIcon,
+  UserIcon,
 } from "phosphor-react-native";
 import { Fonts, Radius } from "../constants/theme";
 import { useAuth } from "../hooks/useAuth";
@@ -72,7 +73,7 @@ function ReplyRow({ reply, currentUserId, onDelete, colors }) {
           <Image source={{ uri: reply.user.avatar }} style={{ width: 26, height: 26, borderRadius: 13, marginTop: 2 }} />
         ) : (
           <View style={{ width: 26, height: 26, borderRadius: 13, marginTop: 2, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
-            <UserCircle size={14} color={colors.textMuted} weight="duotone" />
+            <UserIcon size={20} color={colors.textMuted}></UserIcon>
           </View>
         )}
         <View style={{ flex: 1 }}>
@@ -362,7 +363,7 @@ export default function CommentsSheet({ visible, onClose, post }) {
                   <Image source={{ uri: user.avatar }} style={{ width: 34, height: 34, borderRadius: 17 }} />
                 ) : (
                   <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: colors.bgCard, alignItems: "center", justifyContent: "center" }}>
-                    <UserCircle size={20} color={colors.textMuted} weight="duotone" />
+                    <UserIcon size={20} color={colors.textMuted}></UserIcon>
                   </View>
                 )}
                 <TextInput
