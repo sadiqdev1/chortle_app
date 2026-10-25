@@ -4,59 +4,43 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Fonts ────────────────────────────────────────────────────
-// Registered names must match what useFonts() receives.
-// Lilita One → display only (wordmark, hero copy).
-// Fredoka    → everything else (buttons, tags, headings).
-// Inter      → body, UI, long-form text.
 export const Fonts = {
-  // Display — bold, cartoon-y, logo energy
   display: "LilitaOne_400Regular",
-
-  // Friendly rounded sans — buttons, taglines, section titles
   friendly: "Fredoka_600SemiBold",
   friendlyRegular: "Fredoka_400Regular",
-
-  // UI / body — clean, neutral
   bold: "Inter_700Bold",
   semiBold: "Inter_600SemiBold",
   medium: "Inter_500Medium",
   regular: "Inter_400Regular",
 };
 
-// ── Colors ───────────────────────────────────────────────────
+// ── Static Colors (light palette — used by files that haven't
+//    adopted useTheme yet). Dynamic palette lives in ThemeContext.
+// ─────────────────────────────────────────────────────────────
 export const Colors = {
-  // Backgrounds — kept the warm-neutral base, not stark white
-  bg: "white",
-  bgElevated: "#FFFFFF",
-  bgCard: "#F1F0EB",
-  bgInput: "#F1F0EB",
-
-  // Borders
-  border: "#E4E2DA",
-  borderLight: "#EDEBE3",
-
-  // Ink — primary text and default icons
-  ink: "#111111",
-
-  // The one strong accent this app has
-  accent: "#3D1B83",
-  accentSoft: "#FFEDE3",
-  accentDim: "#FFD9C2",
-
-  // Text
-  textPrimary: "#111111",
-  textSecondary: "gray",
-  textMuted: "#A5A399",
-  textInverse: "#FAFAF8",
-
-  // Utility
-  white: "#FFFFFF",
-  black: "#000000",
-
-  // System signals — muted, functional, not decorative
-  success: "#2F6B4F",
-  error: "red",
-  warning: "#8A6D1B",
+  bg:           "#FFFFFF",
+  bgElevated:   "#FFFFFF",
+  bgCard:       "#F1F0EB",
+  bgInput:      "#F1F0EB",
+  surface:      "#F7F6F2",
+  surface2:     "#EDEBE3",
+  border:       "#E4E2DA",
+  borderLight:  "#EDEBE3",
+  accent:       "#3D1B83",
+  accentBright: "#6A3FD2",
+  accentSoft:   "#EDE7FA",
+  accentDim:    "#D4C8F5",
+  textPrimary:  "#111111",
+  textSecondary:"#555555",
+  textMuted:    "#A5A399",
+  textInverse:  "#FFFFFF",
+  ink:          "#111111",
+  white:        "#FFFFFF",
+  black:        "#000000",
+  danger:       "#E5484D",
+  success:      "#2F6B4F",
+  error:        "#E5484D",
+  warning:      "#8A6D1B",
 };
 
 // ── Typography ───────────────────────────────────────────────
@@ -190,11 +174,11 @@ export const CATEGORIES = [
   { id: "political", label: "Political" },
 ];
 
-// Fixed reaction set — see message above re: this vs. an open
-// emoji picker. Counts are per-reaction, not a single like tally.
+// Reaction set — matches the backend enum + UI reaction IDs.
+// Single tap = 'fire'. Long press reveals the full picker.
 export const REACTIONS = [
-  { id: "fire",  emoji: "🔥" },
-  { id: "laugh", emoji: "😂" },
-  { id: "skull", emoji: "💀" },
-  { id: "heart", emoji: "❤️" },
+  { id: "fire",  emoji: "🔥", label: "Fire"  },
+  { id: "laugh", emoji: "😂", label: "Haha"  },
+  { id: "skull", emoji: "💀", label: "Dead"  },
+  { id: "heart", emoji: "❤️", label: "Love"  },
 ];

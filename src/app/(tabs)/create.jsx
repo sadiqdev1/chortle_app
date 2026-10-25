@@ -1,10 +1,7 @@
-import { Ionicons } from "@expo/vector-icons";
-import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -14,40 +11,75 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Image as PhosphorImage, X, ArrowLeft, CheckCircle } from "phosphor-react-native";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
 import AuthInput from "../../components/AuthInput";
-import { CATEGORIES, Colors, Fonts, Radius } from "../../constants/theme";
+import { CATEGORIES, Fonts, Radius } from "../../constants/theme";
+import { useTheme } from "../../context/ThemeContext";
+import { useToast } from "../../context/ToastContext";
 import { useCreatePost } from "../../hooks/usePosts";
+import { uploadFile } from "../../services/uploadService";
 import { normalizeError } from "../../utils/helpers";
 
+// Map frontend category IDs to the backend enum values
+const CATEGORY_MAP = {
+  trending:     "Trending",
+  wholesome:    "Wholesome",
+  gaming:       "Gaming",
+  relatable:    "Funny",
+  school:       "School",
+  tech:         "Coding",
+  relationship: "Relationship",
+};
+
 export default function CreateScreen() {
+  const { colors, isDark } = useTheme();
+  const { toast } = useToast();
   const [media, setMedia] = useState(null);
   const [caption, setCaption] = useState("");
   const [tag, setTag] = useState("");
   const [errors, setErrors] = useState({});
+  const [uploadProgress, setUploadProgress] = useState(null); // null | "uploading" | "done"
 
   const { mutateAsync: createPost, isPending: publishing } = useCreatePost();
 
+  // Publish button scale spring
+  const publishScale = useSharedValue(1);
+  const publishStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: publishScale.value }],
+  }));
+
   function validate() {
     const next = {};
-    if (!media) next.media = "Add an image or GIF.";
-    if (!tag) next.tag = "Pick a tag.";
+    if (!media) next.media = "Add an image or GIF to continue.";
+    if (!tag) next.tag = "Pick a category for your meme.";
     setErrors(next);
+    if (Object.keys(next).length > 0) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
     return Object.keys(next).length === 0;
   }
 
   async function handlePickMedia() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert("Permission needed", "Allow photo access to post a meme.");
+      toast.warn("Allow photo access to post a meme.");
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ["images"],
       allowsEditing: true,
       quality: 0.85,
     });
     if (!result.canceled) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setMedia(result.assets[0].uri);
       setErrors((e) => ({ ...e, media: undefined }));
     }
@@ -55,94 +87,154 @@ export default function CreateScreen() {
 
   async function handlePublish() {
     if (!validate()) return;
+
+    publishScale.value = withSpring(0.94, { damping: 10 }, () => {
+      publishScale.value = withSpring(1, { damping: 8 });
+    });
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
     try {
+      setUploadProgress("uploading");
+      const imageUrl = await uploadFile(media, "meme");
+      setUploadProgress("done");
+
+      const backendCategory = CATEGORY_MAP[tag] ?? "Funny";
       const post = await createPost({
-        caption: caption.trim(),
-        tag,
-        mediaUri: media,
+        caption: caption.trim() || null,
+        category: backendCategory,
+        image_url: imageUrl,
       });
-      router.replace({
-        pathname: "/PostView",
-        params: { id: post?.id ?? post?.data?.id },
-      });
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      toast.success("Meme posted! 🔥");
+
+      const slug = post?.data?.slug ?? post?.slug;
+      setTimeout(() => {
+        if (slug) {
+          router.replace({ pathname: "/PostView", params: { slug } });
+        } else {
+          router.replace("/(tabs)");
+        }
+      }, 400);
     } catch (e) {
-      Alert.alert("Post failed", normalizeError(e));
+      setUploadProgress(null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      toast.error(normalizeError(e));
     }
   }
 
   const tags = CATEGORIES.filter((c) => c.id !== "all");
+  const isWorking = publishing || uploadProgress === "uploading";
 
   return (
-    <View style={{ flex: 1, backgroundColor: Colors.bg }}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.bg} />
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <StatusBar
+        barStyle={isDark ? "light-content" : "dark-content"}
+        backgroundColor={colors.bg}
+      />
       <SafeAreaView style={{ flex: 1 }} edges={["top", "bottom"]}>
-        {/* Header */}
+        {/* ── Header ────────────────────────────────────── */}
         <View
           style={{
             flexDirection: "row",
             alignItems: "center",
             justifyContent: "space-between",
             paddingHorizontal: 20,
-            paddingVertical: 12,
+            paddingVertical: 14,
             borderBottomWidth: 1,
-            borderBottomColor: Colors.border,
+            borderBottomColor: colors.border,
           }}
         >
-          <TouchableOpacity onPress={() => router.back()} hitSlop={10}>
-            <Text
-              style={{
-                fontFamily: Fonts.friendly,
-                fontSize: 15,
-                color: Colors.textSecondary,
-              }}
-            >
-              Cancel
-            </Text>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel"
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: colors.bgCard,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <ArrowLeft size={20} color={colors.textPrimary} weight="bold" />
           </TouchableOpacity>
 
-          {/* Title — Fredoka */}
           <Text
             style={{
               fontFamily: Fonts.friendly,
               fontSize: 20,
               letterSpacing: -0.1,
-              color: Colors.textPrimary,
+              color: colors.textPrimary,
             }}
           >
             New Meme
           </Text>
 
-          {/* Post button — Fredoka */}
-          <TouchableOpacity
-            onPress={handlePublish}
-            disabled={publishing}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            accessibilityLabel="Publish post"
+          <Animated.View style={publishStyle}>
+            <TouchableOpacity
+              onPress={handlePublish}
+              disabled={isWorking}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Publish meme"
+              style={{
+                height: 38,
+                paddingHorizontal: 20,
+                borderRadius: Radius.full,
+                backgroundColor: isWorking ? colors.accentDim : colors.accent,
+                alignItems: "center",
+                justifyContent: "center",
+                flexDirection: "row",
+                gap: 6,
+              }}
+            >
+              {isWorking ? (
+                <ActivityIndicator size={14} color="#fff" />
+              ) : (
+                <>
+                  <Text
+                    style={{
+                      fontFamily: Fonts.semiBold,
+                      fontSize: 14,
+                      color: "#fff",
+                      letterSpacing: 0.2,
+                    }}
+                  >
+                    Upload
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+
+        {/* ── Upload progress strip ─────────────────────── */}
+        {uploadProgress === "uploading" && (
+          <View
             style={{
-              paddingHorizontal: 18,
-              paddingVertical: 8,
-              borderRadius: Radius.full,
-              backgroundColor: Colors.accent,
-              opacity: publishing ? 0.5 : 1,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 10,
+              paddingHorizontal: 20,
+              paddingVertical: 10,
+              backgroundColor: colors.accentSoft,
             }}
           >
-            {publishing ? (
-              <ActivityIndicator size={14} color={Colors.textInverse} />
-            ) : (
-              <Text
-                style={{
-                  fontFamily: Fonts.friendly,
-                  fontSize: 14,
-                  letterSpacing: 0.2,
-                  color: Colors.textInverse,
-                }}
-              >
-                Post
-              </Text>
-            )}
-          </TouchableOpacity>
-        </View>
+            <ActivityIndicator size={14} color={colors.accent} />
+            <Text
+              style={{
+                fontFamily: Fonts.medium,
+                fontSize: 13,
+                color: colors.accent,
+              }}
+            >
+              Uploading your meme…
+            </Text>
+          </View>
+        )}
 
         <KeyboardAvoidingView
           style={{ flex: 1 }}
@@ -152,69 +244,92 @@ export default function CreateScreen() {
             contentContainerStyle={{
               paddingHorizontal: 24,
               paddingTop: 24,
-              paddingBottom: 40,
+              paddingBottom: 48,
             }}
             keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            {/* Media picker */}
+            {/* ── Media picker ────────────────────────── */}
             <TouchableOpacity
               onPress={handlePickMedia}
               activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Pick an image"
               style={{
-                height: 280,
+                height: 260,
                 borderRadius: Radius.xl,
-                borderWidth: 1.5,
-                borderColor: errors.media ? Colors.error : Colors.border,
-                borderStyle: media ? "solid" : "dashed",
-                backgroundColor: Colors.bgCard,
+                backgroundColor: colors.bgCard,
                 alignItems: "center",
                 justifyContent: "center",
-                marginBottom: 8,
                 overflow: "hidden",
+                marginBottom: 8,
+                borderWidth: 1.5,
+                borderColor: errors.media ? colors.error : colors.border,
+                borderStyle: media ? "solid" : "dashed",
               }}
             >
               {media ? (
-                <Image
-                  source={{ uri: media }}
-                  style={{ width: "100%", height: "100%" }}
-                  resizeMode="contain"
-                />
-              ) : (
-                <View style={{ alignItems: "center", gap: 10 }}>
+                <>
+                  <Image
+                    source={{ uri: media }}
+                    style={{ width: "100%", height: "100%" }}
+                    resizeMode="contain"
+                  />
+                  {/* Change overlay */}
                   <View
                     style={{
-                      width: 52,
-                      height: 52,
-                      borderRadius: 26,
-                      backgroundColor: Colors.accentSoft,
+                      position: "absolute",
+                      bottom: 12,
+                      right: 12,
+                      backgroundColor: "rgba(0,0,0,0.55)",
+                      borderRadius: Radius.full,
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 5,
+                    }}
+                  >
+                    <PhosphorImage size={14} color="#fff" weight="bold" />
+                    <Text
+                      style={{
+                        fontFamily: Fonts.semiBold,
+                        fontSize: 12,
+                        color: "#fff",
+                      }}
+                    >
+                      Change
+                    </Text>
+                  </View>
+                </>
+              ) : (
+                <View style={{ alignItems: "center", gap: 12 }}>
+                  <View
+                    style={{
+                      width: 56,
+                      height: 56,
+                      borderRadius: 28,
+                      backgroundColor: colors.accentSoft,
                       alignItems: "center",
                       justifyContent: "center",
                     }}
                   >
-                    <Ionicons
-                      name="image-outline"
-                      size={24}
-                      color={Colors.accent}
-                    />
+                    <PhosphorImage size={26} color={colors.accent} weight="duotone" />
                   </View>
-
-                  {/* Empty-state heading — Fredoka */}
                   <Text
                     style={{
                       fontFamily: Fonts.friendly,
-                      fontSize: 15,
-                      color: Colors.textPrimary,
+                      fontSize: 16,
+                      color: colors.textPrimary,
                     }}
                   >
                     Add an image or GIF
                   </Text>
-
-                  {/* Empty-state helper — Inter */}
                   <Text
                     style={{
                       fontFamily: Fonts.regular,
                       fontSize: 13,
-                      color: Colors.textMuted,
+                      color: colors.textMuted,
                     }}
                   >
                     Tap to choose from your library
@@ -226,58 +341,54 @@ export default function CreateScreen() {
             {errors.media ? (
               <Text
                 style={{
+                  marginBottom: 16,
                   fontFamily: Fonts.regular,
                   fontSize: 13,
-                  color: Colors.error,
-                  marginBottom: 16,
+                  color: colors.error,
                 }}
               >
                 {errors.media}
               </Text>
             ) : (
-              <View style={{ marginBottom: 16 }} />
+              <View style={{ marginBottom: 20 }} />
             )}
 
-            {media ? (
-              <TouchableOpacity
-                onPress={handlePickMedia}
-                style={{ alignSelf: "flex-start", marginBottom: 20 }}
-                hitSlop={8}
-              >
-                <Text
-                  style={{
-                    fontFamily: Fonts.friendly,
-                    fontSize: 13,
-                    color: Colors.accent,
-                  }}
-                >
-                  Change media
+            {/* ── Caption ─────────────────────────────── */}
+            <View style={{ marginBottom: 18 }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <Text style={{ fontFamily: Fonts.semiBold, fontSize: 11, letterSpacing: 1.4, textTransform: "uppercase", color: colors.textMuted }}>
+                  Caption
                 </Text>
-              </TouchableOpacity>
-            ) : null}
+                <Text style={{
+                  fontFamily: Fonts.regular,
+                  fontSize: 11,
+                  color: caption.length > 450 ? colors.error : caption.length > 350 ? colors.warning : colors.textMuted,
+                }}>
+                  {caption.length}/500
+                </Text>
+              </View>
+              <AuthInput
+                value={caption}
+                onChangeText={setCaption}
+                multiline
+                helper="Optional — keep it spicy 🌶️"
+                placeholder="Add a caption…"
+              />
+            </View>
 
-            <AuthInput
-              label="Caption"
-              value={caption}
-              onChangeText={setCaption}
-              multiline
-              helper="Optional"
-              placeholder="Add a caption…"
-            />
-
-            {/* Tag section */}
+            {/* ── Category ────────────────────────────── */}
             <Text
               style={{
-                fontFamily: Fonts.friendly,
-                fontSize: 12,
-                letterSpacing: 1.2,
+                fontFamily: Fonts.semiBold,
+                fontSize: 11,
+                letterSpacing: 1.4,
                 textTransform: "uppercase",
-                color: Colors.textSecondary,
+                color: colors.textMuted,
                 marginBottom: 12,
                 marginTop: 4,
               }}
             >
-              Tag
+              Category
             </Text>
 
             {errors.tag ? (
@@ -285,8 +396,8 @@ export default function CreateScreen() {
                 style={{
                   fontFamily: Fonts.regular,
                   fontSize: 13,
-                  color: Colors.error,
-                  marginBottom: 8,
+                  color: colors.error,
+                  marginBottom: 10,
                 }}
               >
                 {errors.tag}
@@ -300,6 +411,7 @@ export default function CreateScreen() {
                   <TouchableOpacity
                     key={t.id}
                     onPress={() => {
+                      Haptics.selectionAsync();
                       setTag(t.id);
                       setErrors((e) => ({ ...e, tag: undefined }));
                     }}
@@ -307,23 +419,20 @@ export default function CreateScreen() {
                     accessibilityRole="button"
                     accessibilityState={{ selected: active }}
                     style={{
-                      paddingVertical: 8,
+                      paddingVertical: 9,
                       paddingHorizontal: 16,
                       borderRadius: Radius.full,
                       borderWidth: 1.5,
-                      borderColor: active ? Colors.accent : Colors.border,
-                      backgroundColor: active ? Colors.accent : "transparent",
+                      borderColor: active ? colors.accent : colors.border,
+                      backgroundColor: active ? colors.accent : colors.bgCard,
                     }}
                   >
-                    {/* Tag pill label — Fredoka, short repeated labels */}
                     <Text
                       style={{
-                        fontFamily: Fonts.friendly,
-                        fontSize: 14,
-                        letterSpacing: 0.2,
-                        color: active
-                          ? Colors.textInverse
-                          : Colors.textSecondary,
+                        fontFamily: Fonts.semiBold,
+                        fontSize: 13,
+                        letterSpacing: 0.1,
+                        color: active ? "#fff" : colors.textSecondary,
                       }}
                     >
                       {t.label}

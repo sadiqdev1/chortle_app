@@ -1,20 +1,13 @@
 import { router } from "expo-router";
-import {
-  Image,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Image, StatusBar, Text, TouchableOpacity, View } from "react-native";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { logoWithSmile } from "../constants/data";
-import { Colors, Fonts, Radius, Shadow, Typography } from "../constants/theme";
+import { Fonts, Shadow } from "../constants/theme";
+import { useNavigation } from "expo-router/build/react-navigation";
 
-// Brand hero palette — kept local to this screen since these
-// deep purples only appear on the welcome/splash flow.
+// Brand hero palette — local to this screen
 const BRAND_BG = "#341B77";
 const BLOB = "#3D1E8F";
 
@@ -32,19 +25,18 @@ function DecorativeBlobs() {
         <View
           key={i}
           pointerEvents="none"
-          style={[
-            styles.blob,
-            {
-              width: b.size,
-              height: b.size,
-              borderRadius: b.size / 2,
-              opacity: b.opacity,
-              top: "top" in b ? b.top : undefined,
-              bottom: "bottom" in b ? b.bottom : undefined,
-              left: "left" in b ? b.left : undefined,
-              right: "right" in b ? b.right : undefined,
-            },
-          ]}
+          className="absolute"
+          style={{
+            width: b.size,
+            height: b.size,
+            borderRadius: b.size / 2,
+            backgroundColor: BLOB,
+            opacity: b.opacity,
+            top: "top" in b ? b.top : undefined,
+            bottom: "bottom" in b ? b.bottom : undefined,
+            left: "left" in b ? b.left : undefined,
+            right: "right" in b ? b.right : undefined,
+          }}
         />
       ))}
     </>
@@ -52,48 +44,95 @@ function DecorativeBlobs() {
 }
 
 export default function WelcomeScreen() {
+  const navigation = useNavigation();
   return (
-    <View style={styles.root}>
+    <View className="flex-1 overflow-hidden" style={{ backgroundColor: BRAND_BG }}>
       <StatusBar barStyle="light-content" backgroundColor={BRAND_BG} />
 
       <DecorativeBlobs />
 
-      <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-        <View style={styles.content}>
+      <SafeAreaView className="flex-1" edges={["top", "bottom"]}>
+        <View className="flex-1 px-7 pt-[55px] pb-9 items-center justify-between">
           {/* Logo + wordmark */}
-          <Animated.View entering={FadeIn.duration(500)} style={styles.hero}>
+          <Animated.View
+            entering={FadeIn.duration(500)}
+            className="items-center gap-3.5"
+          >
             <Image
               source={logoWithSmile}
-              style={styles.logo}
+              className="w-[150px] h-[150px]"
               resizeMode="contain"
               accessibilityLabel="Chortle logo"
             />
 
             {/* Lilita One — cartoon wordmark */}
-            <Text style={styles.wordmark}>Chortle</Text>
+            <Text
+              className="text-center"
+              style={{
+                fontFamily: Fonts.display,
+                fontSize: 52,
+                lineHeight: 58,
+                letterSpacing: 1,
+                color: "#FFFFFF",
+              }}
+            >
+              Chortle
+            </Text>
 
             {/* Fredoka — friendly tagline */}
-            <Text style={styles.tagline}>Memes. laughs. Community.</Text>
+            <Text
+              className="text-center"
+              style={{
+                fontFamily: Fonts.friendly,
+                fontSize: 16,
+                lineHeight: 24,
+                letterSpacing: 0.2,
+                color: "rgba(255,255,255,0.85)",
+                maxWidth: 300,
+              }}
+            >
+              Memes. laughs. Community.
+            </Text>
           </Animated.View>
 
           {/* CTA */}
           <Animated.View
             entering={FadeInDown.delay(300).duration(500)}
-            style={styles.cta}
+            className="w-full items-center gap-[18px]"
           >
             <TouchableOpacity
               onPress={() => router.push("/(auth)/Register")}
+              // onPress={()=> navigation.navigate('register')}
               activeOpacity={0.88}
               accessibilityRole="button"
               accessibilityLabel="Get started"
-              style={styles.primaryButton}
+              className="w-full h-[54px] rounded-full bg-white items-center justify-center"
+              style={Shadow.card}
             >
-              {/* Fredoka — button text */}
-              <Text style={styles.primaryButtonText}>Get Started  →</Text>
+              <Text
+                style={{
+                  fontFamily: Fonts.friendly,
+                  fontSize: 16,
+                  lineHeight: 22,
+                  letterSpacing: 0.3,
+                  color: "#3D1B83",
+                }}
+              >
+                Get Started  
+              </Text>
             </TouchableOpacity>
 
-            <View style={styles.loginRow}>
-              <Text style={styles.loginPrompt}>Already have an account?</Text>
+            <View className="flex-row items-center gap-1.5">
+              <Text
+                style={{
+                  fontFamily: Fonts.regular,
+                  fontSize: 14,
+                  lineHeight: 20,
+                  color: "rgba(255,255,255,0.75)",
+                }}
+              >
+                Already have an account?
+              </Text>
 
               <TouchableOpacity
                 onPress={() => router.push("/(auth)/Login")}
@@ -101,7 +140,17 @@ export default function WelcomeScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Log in"
               >
-                <Text style={styles.loginLink}>Log in</Text>
+                <Text
+                  style={{
+                    fontFamily: Fonts.friendly,
+                    fontSize: 15,
+                    lineHeight: 20,
+                    letterSpacing: 0.3,
+                    color: "#FFFFFF",
+                  }}
+                >
+                  Log in
+                </Text>
               </TouchableOpacity>
             </View>
           </Animated.View>
@@ -110,94 +159,3 @@ export default function WelcomeScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: BRAND_BG,
-    overflow: "hidden",
-  },
-  blob: {
-    position: "absolute",
-    backgroundColor: BLOB,
-  },
-  safe: { flex: 1 },
-  content: {
-    flex: 1,
-    paddingHorizontal: 28,
-    paddingTop: 55,
-    paddingBottom: 36,
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  hero: {
-    alignItems: "center",
-    gap: 14,
-  },
-  logo: {
-    width: 150,
-    height: 150,
-  },
-
-  // ── Wordmark — Lilita One ──────────────────────────────────
-  wordmark: {
-    fontFamily: Fonts.display,      // "LilitaOne_400Regular"
-    fontSize: 52,
-    lineHeight: 58,
-    letterSpacing: 1,
-    color: Colors.white,
-    textAlign: "center",
-  },
-
-  // ── Tagline — Fredoka ──────────────────────────────────────
-  tagline: {
-    fontFamily: Fonts.friendly,     // "Fredoka_600SemiBold"
-    fontSize: 16,
-    lineHeight: 24,
-    letterSpacing: 0.2,
-    color: "rgba(255,255,255,0.85)",
-    textAlign: "center",
-    maxWidth: 300,
-  },
-
-  cta: {
-    width: "100%",
-    alignItems: "center",
-    gap: 18,
-  },
-  primaryButton: {
-    width: "100%",
-    height: 54,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-    ...Shadow.card,
-  },
-  primaryButtonText: {
-    fontFamily: Fonts.friendly,     // "Fredoka_600SemiBold"
-    fontSize: 16,
-    lineHeight: 22,
-    letterSpacing: 0.3,
-    color: Colors.accent,           // #3D1B83 — visible on white
-  },
-
-  loginRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  loginPrompt: {
-    fontFamily: Fonts.regular,      // Inter 400
-    fontSize: 14,
-    lineHeight: 20,
-    color: "rgba(255,255,255,0.75)",
-  },
-  loginLink: {
-    fontFamily: Fonts.friendly,     // Fredoka SemiBold
-    fontSize: 15,
-    lineHeight: 20,
-    letterSpacing: 0.3,
-    color: Colors.white,            // ← was Colors.accent (invisible)
-  },
-});

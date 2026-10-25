@@ -1,11 +1,7 @@
 import * as Haptics from "expo-haptics";
-import {
-  ActivityIndicator,
-  Text,
-  TouchableOpacity,
-} from "react-native";
-
-import { Colors, Fonts, Radius, Shadow } from "../constants/theme";
+import { ActivityIndicator, Text, TouchableOpacity } from "react-native";
+import { Fonts, Radius } from "../constants/theme";
+import { useTheme } from "../context/ThemeContext";
 
 export default function AppButton({
   label,
@@ -16,6 +12,7 @@ export default function AppButton({
   style,
   textStyle,
 }) {
+  const { colors } = useTheme();
   const isDisabled = disabled || loading;
   const isSecondary = variant === "secondary";
 
@@ -28,7 +25,7 @@ export default function AppButton({
   return (
     <TouchableOpacity
       onPress={handlePress}
-      disabled={isDisabled}
+      disabled={loading}
       activeOpacity={0.82}
       accessibilityRole="button"
       accessibilityLabel={label}
@@ -41,11 +38,9 @@ export default function AppButton({
           borderRadius: Radius.full,
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: isSecondary ? Colors.bgElevated : Colors.accent,
+          backgroundColor: isSecondary ? colors.bgElevated : colors.accent,
           borderWidth: isSecondary ? 1.5 : 0,
-          borderColor: Colors.border,
-          opacity: isDisabled ? 0.5 : 1,
-          ...(isSecondary ? {} : Shadow.accentGlow),
+          borderColor: colors.border,
         },
         style,
       ]}
@@ -53,7 +48,7 @@ export default function AppButton({
       {loading ? (
         <ActivityIndicator
           size="small"
-          color={isSecondary ? Colors.textPrimary : Colors.textInverse}
+          color={isSecondary ? colors.textPrimary : colors.textInverse}
         />
       ) : (
         <Text
@@ -62,7 +57,7 @@ export default function AppButton({
               fontFamily: Fonts.friendly,
               fontSize: 16,
               letterSpacing: 0.3,
-              color: isSecondary ? Colors.textPrimary : Colors.textInverse,
+              color: isSecondary ? colors.textPrimary : colors.textInverse,
             },
             textStyle,
           ]}

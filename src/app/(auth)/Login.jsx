@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
@@ -13,14 +12,19 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { ArrowLeft } from "phosphor-react-native";
 
 import AuthInput from "../../components/AuthInput";
 import OAuthButtons from "../../components/OAuthButtons";
 import { logoIcon } from "../../constants/data";
-import { Colors, Fonts, Radius, Typography } from "../../constants/theme";
+import { Fonts, Radius, Typography } from "../../constants/theme";
+import { useTheme } from "../../context/ThemeContext";
+import { useToast } from "../../context/ToastContext";
 import { useAuth } from "../../hooks/useAuth";
 
 export default function LoginScreen() {
+  const { colors, isDark } = useTheme();
+  const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -48,6 +52,10 @@ export default function LoginScreen() {
       await login({ email: email.trim().toLowerCase(), password });
       router.replace("/(tabs)");
     } catch (error) {
+      if (error?.isNetworkError) {
+        toast.offline("No internet connection. Check your network and try again.");
+        return;
+      }
       const responseData = error.response?.data;
       const backendErrors = responseData?.errors;
       if (backendErrors) {
@@ -58,9 +66,7 @@ export default function LoginScreen() {
         });
       } else {
         setErrors({
-          form:
-            responseData?.message ||
-            "Something went wrong. Please try again.",
+          form: responseData?.message || "Something went wrong. Please try again.",
         });
       }
     } finally {
@@ -69,15 +75,15 @@ export default function LoginScreen() {
   }
 
   function handleGoogle() {
-    // TODO: wire Google OAuth flow
+    toast.info("Google sign-in coming soon.");
   }
   function handleApple() {
-    // TODO: wire Apple OAuth flow
+    toast.info("Apple sign-in coming soon.");
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: Colors.bg }}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.bg} />
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.bg} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -101,21 +107,21 @@ export default function LoginScreen() {
                 marginBottom: 36,
               }}
             >
-              <TouchableOpacity onPress={() => router.back()} hitSlop={10}>
-                <View
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 20,
-                    backgroundColor: Colors.bgCard,
-                    borderWidth: 1,
-                    borderColor: Colors.border,
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <Ionicons name="arrow-back" size={20} color={Colors.textPrimary} />
-                </View>
+              <TouchableOpacity
+                onPress={() => router.back()}
+                hitSlop={10}
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
+                  backgroundColor: colors.bgCard,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <ArrowLeft size={20} color={colors.textPrimary} weight="bold" />
               </TouchableOpacity>
 
               <View
@@ -123,7 +129,7 @@ export default function LoginScreen() {
                   width: 40,
                   height: 40,
                   borderRadius: 20,
-                  backgroundColor: Colors.accentSoft,
+                  backgroundColor: colors.accentSoft,
                   alignItems: "center",
                   justifyContent: "center",
                   overflow: "hidden",
@@ -144,7 +150,7 @@ export default function LoginScreen() {
                 fontSize: 28,
                 lineHeight: 34,
                 letterSpacing: -0.2,
-                color: Colors.textPrimary,
+                color: colors.textPrimary,
                 marginBottom: 8,
               }}
             >
@@ -153,7 +159,7 @@ export default function LoginScreen() {
             <Text
               style={[
                 Typography.body,
-                { color: Colors.textSecondary, marginBottom: 36 },
+                { color: colors.textSecondary, marginBottom: 36 },
               ]}
             >
               Sign in to keep the memes coming.
@@ -186,7 +192,7 @@ export default function LoginScreen() {
               <Text
                 style={[
                   Typography.small,
-                  { color: Colors.error, marginBottom: 12 },
+                  { color: colors.error, marginBottom: 12 },
                 ]}
               >
                 {errors.form}
@@ -194,7 +200,7 @@ export default function LoginScreen() {
             ) : null}
 
             <TouchableOpacity
-              onPress={() => router.push("/(auth)/ForgotPassword")}
+              onPress={() => router.replace("/(auth)/ForgotPassword")}
               style={{ alignSelf: "flex-end", marginBottom: 28 }}
               hitSlop={8}
             >
@@ -202,7 +208,7 @@ export default function LoginScreen() {
                 style={{
                   fontFamily: Fonts.semiBold,
                   fontSize: 13,
-                  color: Colors.accent,
+                  color: colors.accent,
                 }}
               >
                 Forgot password?
@@ -217,22 +223,21 @@ export default function LoginScreen() {
               style={{
                 height: 56,
                 borderRadius: Radius.full,
-                backgroundColor: Colors.accent,
+                backgroundColor: colors.accent,
                 alignItems: "center",
                 justifyContent: "center",
-                opacity: submitting ? 0.6 : 1,
                 marginBottom: 28,
               }}
             >
               {submitting ? (
-                <ActivityIndicator size={24} color={Colors.textInverse} />
+                <ActivityIndicator size={24} color={colors.textInverse} />
               ) : (
                 <Text
                   style={{
                     fontFamily: Fonts.friendly,
                     fontSize: 16,
                     letterSpacing: 0.3,
-                    color: Colors.textInverse,
+                    color: colors.textInverse,
                   }}
                 >
                   Log in
@@ -251,18 +256,18 @@ export default function LoginScreen() {
                 paddingTop: 20,
               }}
             >
-              <Text style={[Typography.body, { color: Colors.textSecondary }]}>
+              <Text style={[Typography.body, { color: colors.textSecondary }]}>
                 Don't have an account?{" "}
               </Text>
               <TouchableOpacity
-                onPress={() => router.push("/(auth)/Register")}
+                onPress={() => router.replace("/(auth)/Register")}
                 hitSlop={8}
               >
                 <Text
                   style={{
                     fontFamily: Fonts.friendly,
                     fontSize: 15,
-                    color: Colors.accent,
+                    color: colors.accent,
                   }}
                 >
                   Register

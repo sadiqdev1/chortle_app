@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -17,9 +16,13 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { ArrowLeft } from "phosphor-react-native";
 import AppButton from "../../components/AppButton";
 import AuthInput from "../../components/AuthInput";
-import { Colors, Fonts, Typography } from "../../constants/theme";
+import { Fonts, Typography } from "../../constants/theme";
+import { useTheme } from "../../context/ThemeContext";
+import { useToast } from "../../context/ToastContext";
+import { useAuth } from "../../hooks/useAuth";
 import {
   resendPasswordReset,
   resendVerification,
@@ -32,6 +35,7 @@ const CODE_LENGTH = 6;
 const RESEND_SECONDS = 60;
 
 function DigitSlot({ digit, isActive, hasError }) {
+  const { colors } = useTheme();
   const focus = useSharedValue(0);
 
   useEffect(() => {
@@ -43,8 +47,8 @@ function DigitSlot({ digit, isActive, hasError }) {
       focus.value,
       [0, 1],
       [
-        hasError ? Colors.error : Colors.border,
-        hasError ? Colors.error : Colors.accent,
+        hasError ? colors.error : colors.border,
+        hasError ? colors.error : colors.accent,
       ]
     ),
   }));
@@ -57,7 +61,7 @@ function DigitSlot({ digit, isActive, hasError }) {
           fontSize: 28,
           lineHeight: 40,
           height: 40,
-          color: Colors.textPrimary,
+          color: colors.textPrimary,
           textAlign: "center",
         }}
       >
@@ -74,6 +78,9 @@ function DigitSlot({ digit, isActive, hasError }) {
 }
 
 export default function OtpVerificationScreen() {
+  const { colors, isDark } = useTheme();
+  const { toast } = useToast();
+  const { activateSession } = useAuth();
   const { email: emailParam, mode: modeParam } = useLocalSearchParams();
   const email = Array.isArray(emailParam) ? emailParam[0] : emailParam;
   const mode = Array.isArray(modeParam) ? modeParam[0] : modeParam;
@@ -120,7 +127,11 @@ export default function OtpVerificationScreen() {
     setError("");
     try {
       await verifyEmail({ email, code: fullCode });
-      router.replace("/(tabs)");
+      // Activate the session (loads user into AuthContext state)
+      await activateSession();
+      // Navigate to CompleteProfile — user exists now so AuthGuard
+      // would normally redirect, but we use replace before it fires
+      router.replace("/(auth)/CompleteProfile");
     } catch (e) {
       setError(normalizeError(e));
       triggerShake();
@@ -168,21 +179,33 @@ export default function OtpVerificationScreen() {
     setSecondsLeft(RESEND_SECONDS);
     setError("");
     try {
+      let response;
       if (isPasswordReset) {
-        await resendPasswordReset(email);
+        response = await resendPasswordReset(email);
       } else {
-        await resendVerification(email);
+        response = await resendVerification(email);
+      }
+
+      // Backend tells us if the email actually landed
+      if (response?.sent === false) {
+        toast.warn("We couldn't deliver the email. Check your inbox, spam folder, or try a different email address.");
+      } else {
+        toast.success("New code sent — check your inbox and spam folder.");
       }
     } catch (e) {
-      setError(normalizeError(e));
+      if (e?.isNetworkError) {
+        toast.offline("No internet. Check your connection.");
+        return;
+      }
+      toast.error(normalizeError(e));
     }
   }
 
   const digits = code.padEnd(CODE_LENGTH, " ").split("");
 
   return (
-    <View style={{ flex: 1, backgroundColor: Colors.bg }}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.bg} />
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.bg} />
       <SafeAreaView style={{ flex: 1, paddingHorizontal: 24 }} edges={["top", "bottom"]}>
         <TouchableOpacity
           onPress={() => router.back()}
@@ -191,17 +214,12 @@ export default function OtpVerificationScreen() {
         >
           <View
             style={{
-              width: 40,
-              height: 40,
-              borderRadius: 20,
-              backgroundColor: Colors.bgCard,
-              borderWidth: 1,
-              borderColor: Colors.border,
-              alignItems: "center",
-              justifyContent: "center",
+              width: 40, height: 40, borderRadius: 20,
+              backgroundColor: colors.bgCard, borderWidth: 1,
+              borderColor: colors.border, alignItems: "center", justifyContent: "center",
             }}
           >
-            <Ionicons name="arrow-back" size={20} color={Colors.textPrimary} />
+            <ArrowLeft size={20} color={colors.textPrimary} weight="bold" />
           </View>
         </TouchableOpacity>
 
@@ -212,21 +230,16 @@ export default function OtpVerificationScreen() {
             fontSize: 28,
             lineHeight: 34,
             letterSpacing: -0.2,
-            color: Colors.textPrimary,
+            color: colors.textPrimary,
             marginBottom: 8,
           }}
         >
           {isPasswordReset ? "Reset your password" : "Verify it's you"}
         </Text>
-        <Text
-          style={[
-            Typography.body,
-            { color: Colors.textSecondary, marginBottom: 40, lineHeight: 24 },
-          ]}
-        >
+        <Text style={[Typography.body, { color: colors.textSecondary, marginBottom: 40, lineHeight: 24 }]}>
           {email
-            ? `We've sent a 6-digit code to ${email}.`
-            : "We've sent a 6-digit code to your email."}
+            ? `We sent a 6-digit code to ${email}. Check your inbox and spam folder.`
+            : "We sent a 6-digit code to your email. Check your inbox and spam folder."}
         </Text>
 
         <View style={{ position: "relative", marginBottom: 16 }}>
@@ -273,7 +286,7 @@ export default function OtpVerificationScreen() {
           <Text
             style={[
               Typography.small,
-              { color: Colors.error, marginBottom: 8 },
+              { color: colors.error, marginBottom: 8 },
             ]}
           >
             {error}
@@ -283,7 +296,7 @@ export default function OtpVerificationScreen() {
           <Text
             style={[
               Typography.small,
-              { color: Colors.textMuted, marginBottom: 8 },
+              { color: colors.textMuted, marginBottom: 8 },
             ]}
           >
             Processing...
@@ -333,7 +346,7 @@ export default function OtpVerificationScreen() {
             paddingBottom: 24,
           }}
         >
-          <Text style={[Typography.body, { color: Colors.textSecondary }]}>
+          <Text style={[Typography.body, { color: colors.textSecondary }]}>
             Didn't get a code?{" "}
           </Text>
           <TouchableOpacity
@@ -346,7 +359,7 @@ export default function OtpVerificationScreen() {
                 fontFamily: Fonts.friendly,
                 fontSize: 15,
                 letterSpacing: 0.2,
-                color: secondsLeft > 0 ? Colors.textMuted : Colors.accent,
+                color: secondsLeft > 0 ? colors.textMuted : colors.accent,
               }}
             >
               {secondsLeft > 0 ? `Resend in ${secondsLeft}s` : "Resend code"}

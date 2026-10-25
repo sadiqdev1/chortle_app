@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
 import {
@@ -13,6 +12,16 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import {
+  Bell,
+  MagnifyingGlass,
+  UserCircle,
+  Sun,
+  X,
+  CaretDown,
+  Images,
+  Users,
+} from "phosphor-react-native";
 import Animated, {
   Extrapolate,
   interpolate,
@@ -24,204 +33,82 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import PostCard from "../../components/PostCard";
-import {
-  CATEGORIES,
-  Colors,
-  Fonts,
-  MOCK_MEMES,
-  Radius,
-} from "../../constants/theme";
+import { FeedSkeleton } from "../../components/SkeletonLoader";
+import { CATEGORIES, Fonts, Radius } from "../../constants/theme";
 import { useBookmarks } from "../../context/BookmarksContext";
+import { useTheme } from "../../context/ThemeContext";
 import { useAuth } from "../../hooks/useAuth";
+import { useNotifications } from "../../hooks/useNotifications";
 import { usePosts } from "../../hooks/usePosts";
+import { useSuggestedCreators, useToggleFollow } from "../../hooks/useProfile";
 
 const HEADER_ROW_HEIGHT = 68;
-const FEED_TABS_HEIGHT = 46;
-const HEADER_HEIGHT = HEADER_ROW_HEIGHT + FEED_TABS_HEIGHT;
+const FEED_TABS_HEIGHT  = 46;
+const TRENDING_HEIGHT   = 46;
+const HEADER_HEIGHT     = HEADER_ROW_HEIGHT + FEED_TABS_HEIGHT ;
 
-function FeedTab({ label, active, onPress }) {
+/* ── Feed tab ─────────────────────────────────────────────── */
+function FeedTab({ label, active, onPress, onOpenFilter }) {
+  const { colors } = useTheme();
+
   return (
     <TouchableOpacity
-      onPress={onPress}
+      onPress={active ? onOpenFilter : onPress}
       activeOpacity={0.8}
       accessibilityRole="tab"
       accessibilityState={{ selected: active }}
-      style={{
-        flex: 1,
-        alignItems: "center",
-        justifyContent: "center",
-        position: "relative",
-        height: FEED_TABS_HEIGHT,
-      }}
+      style={{ flex: 1, alignItems: "center", justifyContent: "center", height: FEED_TABS_HEIGHT, position: "relative" }}
     >
-      <Text
-        style={{
-          fontFamily: Fonts.friendly,
-          fontSize: 15,
-          letterSpacing: 0.2,
-          color: active ? Colors.textPrimary : Colors.textMuted,
-        }}
-      >
-        {label}
-      </Text>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+        <Text style={{ fontFamily: Fonts.semiBold, fontSize: 15, letterSpacing: 0.1, color: active ? colors.textPrimary : colors.textMuted }}>
+          {label}
+        </Text>
+        {active && <CaretDown size={13} color={colors.textPrimary} weight="bold" />}
+      </View>
 
       {active && (
-        <View
-          style={{
-            position: "absolute",
-            bottom: 0,
-            height: 3,
-            width: 54,
-            borderRadius: 3,
-            backgroundColor: Colors.accent,
-          }}
-        />
+        <View style={{ position: "absolute", bottom: -1, height: 2.5, width: "60%", borderRadius: 3, backgroundColor: colors.accent }} />
       )}
     </TouchableOpacity>
   );
 }
 
-function FilterSheet({
-  visible,
-  onClose,
-  categories,
-  selected,
-  onSelect,
-  onClear,
-}) {
+/* ── Filter sheet ─────────────────────────────────────────── */
+function FilterSheet({ visible, onClose, categories, selected, onSelect, onClear, title }) {
+  const { colors } = useTheme();
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      {/* Dim backdrop */}
-      <Pressable
-        onPress={onClose}
-        style={{
-          flex: 1,
-          backgroundColor: "rgba(0,0,0,0.35)",
-          justifyContent: "flex-end",
-        }}
-      >
-        {/* Sheet content — stopPropagation by wrapping in Pressable without onPress */}
-        <Pressable
-          onPress={() => {}}
-          style={{
-            backgroundColor: Colors.bg,
-            borderTopLeftRadius: Radius.xxl,
-            borderTopRightRadius: Radius.xxl,
-            paddingTop: 12,
-            paddingBottom: 32,
-            paddingHorizontal: 20,
-          }}
-        >
-          {/* Grab handle */}
-          <View
-            style={{
-              alignSelf: "center",
-              width: 40,
-              height: 4,
-              borderRadius: 2,
-              backgroundColor: Colors.border,
-              marginBottom: 16,
-            }}
-          />
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+      <Pressable onPress={onClose} style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.38)" }}>
+        <Pressable onPress={() => {}} style={{ paddingHorizontal: 20, paddingBottom: 36, paddingTop: 12, backgroundColor: colors.bg, borderTopLeftRadius: Radius.xxl, borderTopRightRadius: Radius.xxl }}>
 
-          {/* Header row */}
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-              marginBottom: 18,
-            }}
-          >
-            <Text
-              style={{
-                fontFamily: Fonts.friendly,
-                fontSize: 20,
-                letterSpacing: -0.1,
-                color: Colors.textPrimary,
-              }}
-            >
-              Filter
+          <View style={{ alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: 18 }} />
+
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+            <Text style={{ fontFamily: Fonts.friendly, fontSize: 20, letterSpacing: -0.1, color: colors.textPrimary }}>
+              {title ?? "Filter"}
             </Text>
-
-            <TouchableOpacity onPress={onClose} hitSlop={10}>
-              <View
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 16,
-                  backgroundColor: Colors.bgCard,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Ionicons
-                  name="close"
-                  size={18}
-                  color={Colors.textPrimary}
-                />
+            <TouchableOpacity onPress={onClose} hitSlop={12}>
+              <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.bgCard, alignItems: "center", justifyContent: "center" }}>
+                <X size={17} color={colors.textPrimary} weight="bold" />
               </View>
             </TouchableOpacity>
           </View>
 
-          {/* Section label */}
-          <Text
-            style={{
-              fontFamily: Fonts.friendly,
-              fontSize: 12,
-              letterSpacing: 1.2,
-              textTransform: "uppercase",
-              color: Colors.textMuted,
-              marginBottom: 12,
-            }}
-          >
+          <Text style={{ fontFamily: Fonts.semiBold, fontSize: 11, letterSpacing: 1.4, textTransform: "uppercase", color: colors.textMuted, marginBottom: 14 }}>
             Categories
           </Text>
 
-          {/* Category grid */}
-          <View
-            style={{
-              flexDirection: "row",
-              flexWrap: "wrap",
-              gap: 10,
-              marginBottom: 24,
-            }}
-          >
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 28 }}>
             {categories.map((c) => {
-              const active = selected === c.id;
+              const isActive = selected === c.id;
               return (
                 <TouchableOpacity
                   key={c.id}
                   onPress={() => onSelect(c.id)}
                   activeOpacity={0.7}
-                  style={{
-                    paddingHorizontal: 16,
-                    paddingVertical: 10,
-                    borderRadius: Radius.full,
-                    backgroundColor: active
-                      ? Colors.accent
-                      : Colors.bgCard,
-                    borderWidth: 1.5,
-                    borderColor: active
-                      ? Colors.accent
-                      : Colors.border,
-                  }}
+                  style={{ paddingHorizontal: 16, paddingVertical: 10, borderRadius: Radius.full, borderWidth: 1.5, borderColor: isActive ? colors.accent : colors.border, backgroundColor: isActive ? colors.accent : colors.bgCard }}
                 >
-                  <Text
-                    style={{
-                      fontFamily: Fonts.friendly,
-                      fontSize: 14,
-                      letterSpacing: 0.2,
-                      color: active
-                        ? Colors.textInverse
-                        : Colors.textSecondary,
-                    }}
-                  >
+                  <Text style={{ fontFamily: Fonts.semiBold, fontSize: 13, color: isActive ? "#fff" : colors.textSecondary }}>
                     {c.label}
                   </Text>
                 </TouchableOpacity>
@@ -229,55 +116,12 @@ function FilterSheet({
             })}
           </View>
 
-          {/* Actions */}
           <View style={{ flexDirection: "row", gap: 12 }}>
-            <TouchableOpacity
-              onPress={onClear}
-              activeOpacity={0.7}
-              style={{
-                flex: 1,
-                height: 50,
-                borderRadius: Radius.lg,
-                borderWidth: 1.5,
-                borderColor: Colors.border,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Text
-                style={{
-                  fontFamily: Fonts.friendly,
-                  fontSize: 15,
-                  letterSpacing: 0.2,
-                  color: Colors.textPrimary,
-                }}
-              >
-                Clear
-              </Text>
+            <TouchableOpacity onPress={onClear} activeOpacity={0.7} style={{ flex: 1, height: 50, borderRadius: Radius.lg, borderWidth: 1.5, borderColor: colors.border, alignItems: "center", justifyContent: "center" }}>
+              <Text style={{ fontFamily: Fonts.semiBold, fontSize: 15, color: colors.textPrimary }}>Clear</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={onClose}
-              activeOpacity={0.85}
-              style={{
-                flex: 2,
-                height: 50,
-                borderRadius: Radius.lg,
-                backgroundColor: Colors.accent,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Text
-                style={{
-                  fontFamily: Fonts.friendly,
-                  fontSize: 15,
-                  letterSpacing: 0.2,
-                  color: Colors.textInverse,
-                }}
-              >
-                Apply
-              </Text>
+            <TouchableOpacity onPress={onClose} activeOpacity={0.85} style={{ flex: 2, height: 50, borderRadius: Radius.lg, backgroundColor: colors.accent, alignItems: "center", justifyContent: "center" }}>
+              <Text style={{ fontFamily: Fonts.semiBold, fontSize: 15, color: "#fff" }}>Apply</Text>
             </TouchableOpacity>
           </View>
         </Pressable>
@@ -286,9 +130,89 @@ function FilterSheet({
   );
 }
 
+/* ── Suggested creators card ──────────────────────────────── */
+function SuggestedCreatorCard({ creator, colors }) {
+  const { mutate: toggleFollow, isPending } = useToggleFollow(creator?.username);
+
+  if (!creator?.username) return null;
+
+  return (
+    <TouchableOpacity
+      onPress={() => router.push({ pathname: "/UserProfile", params: { username: creator.username } })}
+      activeOpacity={0.85}
+      style={{
+        width: 140,
+        backgroundColor: colors.bgCard,
+        borderRadius: Radius.xl,
+        padding: 14,
+        alignItems: "center",
+        borderWidth: 1,
+        borderColor: colors.border,
+        marginRight: 10,
+      }}
+    >
+      {creator.avatar ? (
+        <Image source={{ uri: creator.avatar }} style={{ width: 52, height: 52, borderRadius: 26, marginBottom: 8 }} />
+      ) : (
+        <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
+          <Text style={{ fontSize: 24 }}>🐸</Text>
+        </View>
+      )}
+      <Text numberOfLines={1} style={{ fontFamily: Fonts.semiBold, fontSize: 13, color: colors.textPrimary, marginBottom: 2 }}>
+        {creator.name}
+      </Text>
+      <Text numberOfLines={1} style={{ fontFamily: Fonts.regular, fontSize: 11, color: colors.textMuted, marginBottom: 10 }}>
+        @{creator.username}
+      </Text>
+      <TouchableOpacity
+        onPress={(e) => { e.stopPropagation?.(); toggleFollow(); }}
+        disabled={isPending}
+        style={{
+          paddingHorizontal: 16,
+          paddingVertical: 7,
+          borderRadius: Radius.full,
+          backgroundColor: creator.is_following ? "transparent" : colors.accent,
+          borderWidth: 1.5,
+          borderColor: creator.is_following ? colors.border : colors.accent,
+        }}
+      >
+        <Text style={{ fontFamily: Fonts.semiBold, fontSize: 12, color: creator.is_following ? colors.textSecondary : "#fff" }}>
+          {creator.is_following ? "Following" : "Follow"}
+        </Text>
+      </TouchableOpacity>
+    </TouchableOpacity>
+  );
+}
+
+function SuggestedCreators({ colors }) {
+  const { data } = useSuggestedCreators();
+  const creators = data?.data ?? [];
+
+  if (!creators.length) return null;
+
+  return (
+    <View style={{ paddingTop: 28, paddingHorizontal: 20 }}>
+      <Text style={{ fontFamily: Fonts.friendly, fontSize: 18, color: colors.textPrimary, marginBottom: 4 }}>
+        People to follow
+      </Text>
+      <Text style={{ fontFamily: Fonts.regular, fontSize: 14, color: colors.textSecondary, marginBottom: 16 }}>
+        Follow some creators to fill your feed.
+      </Text>
+      <FlatList
+        data={creators}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        keyExtractor={(c) => String(c.id)}
+        renderItem={({ item }) => <SuggestedCreatorCard creator={item} colors={colors} />}
+        contentContainerStyle={{ paddingRight: 20 }}
+      />
+    </View>
+  );
+}
+
+/* ── Home screen ──────────────────────────────────────────── */
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-
   const [activeCategory, setActiveCategory] = useState("all");
   const [activeFeed, setActiveFeed] = useState("for-you");
   const [refreshing, setRefreshing] = useState(false);
@@ -296,50 +220,49 @@ export default function HomeScreen() {
 
   const { user } = useAuth();
   const { isBookmarked, toggleBookmark } = useBookmarks();
+  const { colors, isDark } = useTheme();
 
-  const { data: postsData, isLoading, refetch } = usePosts(
-    activeCategory !== "all"
-      ? {
-          tag: activeCategory,
-          ...(activeFeed === "following" && { feed: "following" }),
-        }
-      : activeFeed === "following"
-        ? { feed: "following" }
-        : {}
-  );
+  const { data: rawNotifData } = useNotifications();
+  const unreadCount = useMemo(() => {
+    const list = rawNotifData?.data ?? rawNotifData ?? [];
+    return Array.isArray(list) ? list.filter((n) => !n.read_at).length : 0;
+  }, [rawNotifData]);
+
+  const queryParams = useMemo(() => {
+    const p = {};
+    if (activeCategory !== "all") p.category = activeCategory;
+    if (activeFeed === "following") p.feed = "following";
+    return p;
+  }, [activeCategory, activeFeed]);
+
+  const { data: postsData, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage, refetch } = usePosts(queryParams);
 
   const allPosts = useMemo(() => {
-    const raw = postsData?.data ?? postsData ?? [];
-    const list = Array.isArray(raw) ? raw : [];
-    return list.length > 0 ? list : MOCK_MEMES;
+    return (postsData?.pages ?? []).flatMap((page) => {
+      const raw = page?.data ?? page ?? [];
+      return Array.isArray(raw) ? raw : [];
+    });
   }, [postsData]);
 
   const greeting = useMemo(() => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "GOOD MORNING";
-    if (hour < 17) return "GOOD AFTERNOON";
+    const h = new Date().getHours();
+    if (h < 12) return "GOOD MORNING";
+    if (h < 17) return "GOOD AFTERNOON";
     return "GOOD EVENING";
   }, []);
 
   const hasActiveFilter = activeCategory !== "all";
-  const activeCategoryLabel =
-    CATEGORIES.find((c) => c.id === activeCategory)?.label ?? "All";
+  const activeCategoryLabel = CATEGORIES.find((c) => c.id === activeCategory)?.label ?? "All";
+  const EmptyIcon = activeFeed === "following" ? Users : Images;
 
-  /* ============================================================
-     SCROLL-DRIVEN HEADER
-  ============================================================ */
-
+  /* ── Scroll-driven header ──────────────────────────────── */
   const hideProgress = useSharedValue(0);
   const lastScrollY = useSharedValue(0);
-
-  const headerOffset = -(HEADER_HEIGHT + insets.top);
-  const headerVisibleOffset = 0;
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       const y = event.contentOffset.y;
       const delta = y - lastScrollY.value;
-
       if (y <= 8) {
         hideProgress.value = withTiming(0, { duration: 150 });
       } else if (delta > 4 && y > HEADER_HEIGHT) {
@@ -347,400 +270,102 @@ export default function HomeScreen() {
       } else if (delta < -4) {
         hideProgress.value = withTiming(0, { duration: 200 });
       }
-
       lastScrollY.value = y;
     },
   });
 
-  const headerStyle = useAnimatedStyle(() => {
-    const translateY = interpolate(
-      hideProgress.value,
-      [0, 1],
-      [headerVisibleOffset, headerOffset],
-      Extrapolate.CLAMP
-    );
-
-    const opacity = interpolate(
-      hideProgress.value,
-      [0, 0.7, 1],
-      [1, 0.6, 0],
-      Extrapolate.CLAMP
-    );
-
-    return {
-      transform: [{ translateY }],
-      opacity,
-    };
-  });
+  const headerStyle = useAnimatedStyle(() => ({
+    transform: [{
+      translateY: interpolate(hideProgress.value, [0, 1], [0, -(HEADER_HEIGHT + insets.top)], Extrapolate.CLAMP),
+    }],
+    opacity: interpolate(hideProgress.value, [0, 0.7, 1], [1, 0.6, 0], Extrapolate.CLAMP),
+  }));
 
   async function handleRefresh() {
     setRefreshing(true);
-    try {
-      await refetch?.();
-    } finally {
-      setRefreshing(false);
-    }
+    try { await refetch?.(); } finally { setRefreshing(false); }
   }
 
-  /* ============================================================
-     EMPTY STATE
-  ============================================================ */
-
-  const isFollowingEmpty = activeFeed === "following";
-
-  const emptyTitle = isFollowingEmpty
-    ? "Your following feed is empty"
-    : hasActiveFilter
-      ? `Nothing in ${activeCategoryLabel} yet`
-      : "Nothing here yet";
-
-  const emptyMessage = isFollowingEmpty
-    ? "Follow some creators and their memes will show up here."
-    : hasActiveFilter
-      ? "Try a different category, or clear the filter."
-      : "Be the first to post a meme.";
-
-  /* ============================================================
-     FLOATING HEADER
-  ============================================================ */
-
+  /* ── Floating header ──────────────────────────────────── */
   const Header = (
     <Animated.View
-      style={[
-        {
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 10,
-          paddingTop: insets.top,
-          height: HEADER_HEIGHT + insets.top,
-          backgroundColor: Colors.bg,
-        },
-        headerStyle,
-      ]}
+      style={[{
+        position: "absolute", top: 0, left: 0, right: 0, zIndex: 10,
+        paddingTop: insets.top, height: HEADER_HEIGHT + insets.top,
+        backgroundColor: colors.bg,
+      }, headerStyle]}
     >
       {/* Greeting row */}
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          paddingHorizontal: 20,
-          height: HEADER_ROW_HEIGHT,
-        }}
-      >
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, height: HEADER_ROW_HEIGHT }}>
         <View>
-          <Text
-            style={{
-              fontFamily: Fonts.medium,
-              fontSize: 11,
-              letterSpacing: 2,
-              color: Colors.textMuted,
-              marginBottom: 2,
-            }}
-          >
+          <Text style={{ fontFamily: Fonts.semiBold, fontSize: 11, letterSpacing: 2, color: colors.textMuted, marginBottom: 2 }}>
             {greeting}
           </Text>
-
-          <View
-            style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-          >
-            <Text
-              style={{
-                fontFamily: Fonts.friendly,
-                fontSize: 24,
-                letterSpacing: -0.2,
-                color: Colors.textPrimary,
-              }}
-            >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Text style={{ fontFamily: Fonts.friendly, fontSize: 24, letterSpacing: -0.2, color: colors.textPrimary }}>
               {user?.name?.split(" ")[0] ?? "there"}
             </Text>
-            <View
-              style={{
-                width: 30,
-                height: 30,
-                borderRadius: 8,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Ionicons
-                name="sunny-outline"
-                size={16}
-                color={Colors.accent}
-              />
-            </View>
+            <Sun size={18} color={colors.accent} weight="duotone" />
           </View>
         </View>
 
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          <TouchableOpacity
-            onPress={() => router.push("/Notifications")}
-            activeOpacity={0.75}
-            accessibilityRole="button"
-            accessibilityLabel="Notifications"
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 13,
-              backgroundColor: Colors.bgCard,
-              borderWidth: 0.5,
-              borderColor: Colors.border,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Ionicons
-              name="notifications-outline"
-              size={20}
-              color={Colors.textSecondary}
-            />
-            <View
-              style={{
-                position: "absolute",
-                top: 8,
-                right: 9,
-                width: 8,
-                height: 8,
-                borderRadius: 4,
-                backgroundColor: Colors.accent,
-                borderWidth: 1.5,
-                borderColor: Colors.bgCard,
-              }}
-            />
-          </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => router.push("/search")}
-            activeOpacity={0.75}
-            accessibilityRole="button"
-            accessibilityLabel="Search"
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 13,
-              backgroundColor: Colors.bgCard,
-              borderWidth: 0.5,
-              borderColor: Colors.border,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Ionicons
-              name="search-outline"
-              size={20}
-              color={Colors.textSecondary}
-            />
-          </TouchableOpacity>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+
 
           <TouchableOpacity
             onPress={() => router.push("/profile")}
             activeOpacity={0.75}
             accessibilityRole="button"
             accessibilityLabel="Profile"
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 13,
-              backgroundColor: Colors.bgCard,
-              borderWidth: 0.5,
-              borderColor: Colors.border,
-              alignItems: "center",
-              justifyContent: "center",
-              overflow: "hidden",
-            }}
+            style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.bgCard, alignItems: "center", justifyContent: "center", overflow: "hidden" }}
           >
             {user?.avatar ? (
-              <Image
-                source={{ uri: user.avatar }}
-                style={{ width: 40, height: 40, borderRadius: 13 }}
-              />
+              <Image source={{ uri: user.avatar }} style={{ width: 40, height: 40, borderRadius: 20 }} />
             ) : (
-              <Ionicons
-                name="person-outline"
-                size={20}
-                color={Colors.textSecondary}
-              />
+              <UserCircle size={22} color={colors.textSecondary} weight="duotone" />
             )}
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Feed tabs + filter button */}
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          paddingHorizontal: 20,
-          height: FEED_TABS_HEIGHT,
-          borderBottomWidth: 1,
-          borderBottomColor: Colors.borderLight,
-        }}
-      >
-        <FeedTab
-          label="For You"
-          active={activeFeed === "for-you"}
-          onPress={() => setActiveFeed("for-you")}
-        />
-        <FeedTab
-          label="Following"
-          active={activeFeed === "following"}
-          onPress={() => setActiveFeed("following")}
-        />
-
-        {/* Filter button */}
-        <TouchableOpacity
-          onPress={() => setFilterOpen(true)}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Open filter"
-          style={{
-            width: 40,
-            height: 40,
-            marginLeft: 8,
-            borderRadius: 13,
-            backgroundColor: hasActiveFilter
-              ? Colors.accentSoft
-              : Colors.bgCard,
-            borderWidth: hasActiveFilter ? 1.5 : 0.5,
-            borderColor: hasActiveFilter
-              ? Colors.accent
-              : Colors.border,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Ionicons
-            name="options-outline"
-            size={19}
-            color={hasActiveFilter ? Colors.accent : Colors.textSecondary}
-          />
-          {hasActiveFilter && (
-            <View
-              style={{
-                position: "absolute",
-                top: 6,
-                right: 6,
-                width: 8,
-                height: 8,
-                borderRadius: 4,
-                backgroundColor: Colors.accent,
-                borderWidth: 1.5,
-                borderColor: Colors.accentSoft,
-              }}
-            />
-          )}
-        </TouchableOpacity>
+      {/* Feed tabs */}
+      <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, borderBottomWidth: 0, borderBottomColor: colors.border, height: FEED_TABS_HEIGHT }}>
+        <FeedTab label="For You" active={activeFeed === "for-you"} onPress={() => setActiveFeed("for-you")} onOpenFilter={() => setFilterOpen(true)} />
+        <FeedTab label="Following" active={activeFeed === "following"} onPress={() => setActiveFeed("following")} onOpenFilter={() => setFilterOpen(true)} />
       </View>
+
+  
     </Animated.View>
   );
 
-  /* ============================================================
-     LIST HEADER
-  ============================================================ */
-
+  /* ── List header ──────────────────────────────────────── */
   const ListHeader = (
-    <>
-      <View style={{ height: HEADER_HEIGHT + insets.top }} />
-
-      {/* Active filter chip (only visible when a category is selected) */}
-      {hasActiveFilter ? (
-        <View
-          style={{
-            flexDirection: "row",
-            paddingHorizontal: 20,
-            paddingTop: 14,
-            paddingBottom: 4,
-          }}
-        >
-          <TouchableOpacity
-            onPress={() => setActiveCategory("all")}
-            activeOpacity={0.7}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 6,
-              paddingHorizontal: 12,
-              paddingVertical: 6,
-              borderRadius: Radius.full,
-              backgroundColor: Colors.accentSoft,
-              borderWidth: 1.5,
-              borderColor: Colors.accentDim,
-            }}
-          >
-            <Text
-              style={{
-                fontFamily: Fonts.friendly,
-                fontSize: 13,
-                letterSpacing: 0.2,
-                color: Colors.accent,
-              }}
-            >
-              {activeCategoryLabel}
-            </Text>
-            <Ionicons name="close" size={13} color={Colors.accent} />
-          </TouchableOpacity>
-        </View>
-      ) : null}
-    </>
+    <View style={{ height: HEADER_HEIGHT + insets.top }} />
   );
 
   const EmptyState = (
-    <View
-      style={{
-        alignItems: "center",
-        paddingTop: 60,
-        paddingHorizontal: 32,
-      }}
-    >
-      <View
-        style={{
-          width: 64,
-          height: 64,
-          borderRadius: 20,
-          backgroundColor: Colors.bgCard,
-          alignItems: "center",
-          justifyContent: "center",
-          marginBottom: 16,
-        }}
-      >
-        <Ionicons
-          name={isFollowingEmpty ? "people-outline" : "images-outline"}
-          size={30}
-          color={Colors.textMuted}
-        />
+    <View style={{ alignItems: "center", paddingTop: 60, paddingHorizontal: 32 }}>
+      <View style={{ width: 68, height: 68, borderRadius: 22, backgroundColor: colors.bgCard, alignItems: "center", justifyContent: "center", marginBottom: 18 }}>
+        <EmptyIcon size={30} color={colors.textMuted} weight="duotone" />
       </View>
-
-      <Text
-        style={{
-          fontFamily: Fonts.friendly,
-          fontSize: 17,
-          color: Colors.textPrimary,
-          marginBottom: 8,
-          textAlign: "center",
-        }}
-      >
-        {emptyTitle}
+      <Text style={{ fontFamily: Fonts.friendly, fontSize: 18, color: colors.textPrimary, textAlign: "center", marginBottom: 8 }}>
+        {activeFeed === "following" ? "Your following feed is empty" : hasActiveFilter ? `Nothing in ${activeCategoryLabel} yet` : "Nothing here yet"}
       </Text>
-
-      <Text
-        style={{
-          fontFamily: Fonts.regular,
-          fontSize: 15,
-          lineHeight: 22,
-          color: Colors.textSecondary,
-          textAlign: "center",
-        }}
-      >
-        {emptyMessage}
+      <Text style={{ fontFamily: Fonts.regular, fontSize: 15, lineHeight: 22, color: colors.textSecondary, textAlign: "center", marginBottom: 4 }}>
+        {activeFeed === "following"
+          ? "Follow some creators to see their memes here."
+          : hasActiveFilter
+            ? "Try a different category, or clear the filter."
+            : "Be the first to post a meme."}
       </Text>
+      {activeFeed === "following" && <SuggestedCreators colors={colors} />}
     </View>
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: Colors.bg }}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.bg} />
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.bg} />
 
       {Header}
 
@@ -750,41 +375,36 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         onScroll={scrollHandler}
         scrollEventThrottle={16}
-        contentContainerStyle={{
-          paddingHorizontal: 0,
-          paddingBottom: 50,
-        }}
+        contentContainerStyle={{ paddingBottom: 60 }}
         ListHeaderComponent={ListHeader}
+        onEndReached={() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage(); }}
+        onEndReachedThreshold={0.4}
+        ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={colors.accent} style={{ marginVertical: 16 }} /> : null}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor={Colors.accent}
-            colors={[Colors.accent]}
+            tintColor={colors.accent}
+            colors={[colors.accent]}
             progressViewOffset={HEADER_HEIGHT + insets.top}
           />
         }
         ListEmptyComponent={
-          isLoading ? (
-            <ActivityIndicator
-              color={Colors.accent}
-              style={{ marginTop: 40 }}
-            />
-          ) : (
-            EmptyState
-          )
+          isLoading
+            ? (
+              <>
+                <View style={{ height: HEADER_HEIGHT + insets.top }} />
+                <FeedSkeleton count={4} />
+              </>
+            )
+            : EmptyState
         }
         renderItem={({ item: post }) => (
           <PostCard
             post={post}
-            bookmarked={isBookmarked(post.id)}
+            bookmarked={post.isBookmarked}
             onToggleBookmark={() => toggleBookmark(post)}
-            onPress={() =>
-              router.push({
-                pathname: "/PostView",
-                params: { id: post.id },
-              })
-            }
+            onPress={() => router.push({ pathname: "/PostView", params: { slug: post.slug } })}
           />
         )}
       />
@@ -794,14 +414,9 @@ export default function HomeScreen() {
         onClose={() => setFilterOpen(false)}
         categories={CATEGORIES}
         selected={activeCategory}
-        onSelect={(id) => {
-          setActiveCategory(id);
-          setFilterOpen(false);
-        }}
-        onClear={() => {
-          setActiveCategory("all");
-          setFilterOpen(false);
-        }}
+        onSelect={(id) => { setActiveCategory(id); setFilterOpen(false); }}
+        onClear={() => { setActiveCategory("all"); setFilterOpen(false); }}
+        title={activeFeed === "following" ? "Filter Following" : "Filter For You"}
       />
     </View>
   );

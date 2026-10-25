@@ -1,11 +1,10 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Camera, Check, CaretRight } from "phosphor-react-native";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -21,16 +20,19 @@ import Animated, {
   SlideOutLeft,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
-import AuthInput from "../components/AuthInput";
-import CountryPickerModal from "../components/CountryPickerModal";
-import { CATEGORIES, Colors, Fonts, Radius } from "../constants/theme";
-import { useUpdateProfile } from "../hooks/useProfile";
-import { normalizeError } from "../utils/helpers";
+import AuthInput from "../../components/AuthInput";
+import CountryPickerModal from "../../components/CountryPickerModal";
+import { CATEGORIES, Fonts, Radius } from "../../constants/theme";
+import { useTheme } from "../../context/ThemeContext";
+import { useToast } from "../../context/ToastContext";
+import { useUpdateProfile } from "../../hooks/useProfile";
+import { normalizeError } from "../../utils/helpers";
 
 const TOTAL_STEPS = 4;
 const GENDERS = ["Female", "Male", "Non-binary", "Prefer not to say"];
 
 function StepDots({ step }) {
+  const { colors } = useTheme();
   return (
     <View style={{ flexDirection: "row", gap: 6 }}>
       {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
@@ -40,7 +42,7 @@ function StepDots({ step }) {
             height: 3,
             borderRadius: 2,
             width: i === step ? 24 : 8,
-            backgroundColor: i <= step ? Colors.accent : Colors.border,
+            backgroundColor: i <= step ? colors.accent : colors.border,
           }}
         />
       ))}
@@ -49,6 +51,7 @@ function StepDots({ step }) {
 }
 
 function StepHeader({ step, title, subtitle }) {
+  const { colors } = useTheme();
   return (
     <View style={{ marginBottom: 32 }}>
       {/* Step counter — Inter, functional metadata */}
@@ -57,7 +60,7 @@ function StepHeader({ step, title, subtitle }) {
           fontFamily: Fonts.medium,
           fontSize: 11,
           letterSpacing: 2,
-          color: Colors.textMuted,
+          color: colors.textMuted,
           marginBottom: 10,
         }}
       >
@@ -71,7 +74,7 @@ function StepHeader({ step, title, subtitle }) {
           fontSize: 28,
           lineHeight: 34,
           letterSpacing: -0.2,
-          color: Colors.textPrimary,
+          color: colors.textPrimary,
           marginBottom: 8,
         }}
       >
@@ -84,7 +87,7 @@ function StepHeader({ step, title, subtitle }) {
           fontFamily: Fonts.regular,
           fontSize: 15,
           lineHeight: 23,
-          color: Colors.textSecondary,
+          color: colors.textSecondary,
         }}
       >
         {subtitle}
@@ -94,6 +97,7 @@ function StepHeader({ step, title, subtitle }) {
 }
 
 function NavRow({ onBack, onNext, nextLabel, nextDisabled, showBack, loading }) {
+  const { colors } = useTheme();
   return (
     <View style={{ flexDirection: "row", gap: 12, marginTop: 8 }}>
       {showBack && (
@@ -107,7 +111,7 @@ function NavRow({ onBack, onNext, nextLabel, nextDisabled, showBack, loading }) 
             paddingHorizontal: 22,
             borderRadius: Radius.lg,
             borderWidth: 1.5,
-            borderColor: Colors.border,
+            borderColor: colors.border,
             alignItems: "center",
             justifyContent: "center",
           }}
@@ -118,7 +122,7 @@ function NavRow({ onBack, onNext, nextLabel, nextDisabled, showBack, loading }) 
               fontFamily: Fonts.friendly,
               fontSize: 15,
               letterSpacing: 0.2,
-              color: Colors.textSecondary,
+              color: colors.textSecondary,
             }}
           >
             Back
@@ -137,14 +141,13 @@ function NavRow({ onBack, onNext, nextLabel, nextDisabled, showBack, loading }) 
           flex: 1,
           height: 54,
           borderRadius: Radius.lg,
-          backgroundColor: Colors.accent,
+          backgroundColor: colors.accent,
           alignItems: "center",
           justifyContent: "center",
-          opacity: nextDisabled ? 0.4 : 1,
         }}
       >
         {loading ? (
-          <ActivityIndicator color={Colors.textInverse} />
+          <ActivityIndicator color={colors.textInverse} />
         ) : (
           /* Primary button — Fredoka */
           <Text
@@ -152,7 +155,7 @@ function NavRow({ onBack, onNext, nextLabel, nextDisabled, showBack, loading }) 
               fontFamily: Fonts.friendly,
               fontSize: 16,
               letterSpacing: 0.3,
-              color: Colors.textInverse,
+              color: colors.textInverse,
             }}
           >
             {nextLabel}
@@ -165,13 +168,12 @@ function NavRow({ onBack, onNext, nextLabel, nextDisabled, showBack, loading }) 
 
 // ── Step 0: Photo + name / bio ───────────────────────────────────────────────
 function PhotoStep({ photo, setPhoto, name, setName, bio, setBio, onNext }) {
+  const { colors } = useTheme();
+  const { toast } = useToast();
   async function handlePickPhoto() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert(
-        "Permission needed",
-        "Allow photo access to set a profile picture."
-      );
+      toast.warn("Allow photo access to set a profile picture.");
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -213,18 +215,14 @@ function PhotoStep({ photo, setPhoto, name, setName, bio, setBio, onNext }) {
                 height: 100,
                 borderRadius: 50,
                 borderWidth: 1.5,
-                borderColor: Colors.border,
+                borderColor: colors.border,
                 borderStyle: "dashed",
                 alignItems: "center",
                 justifyContent: "center",
-                backgroundColor: Colors.bgCard,
+                backgroundColor: colors.bgCard,
               }}
             >
-              <Ionicons
-                name="camera-outline"
-                size={26}
-                color={Colors.textMuted}
-              />
+              <Camera size={26} color={colors.textMuted} weight="duotone" />
             </View>
           )}
 
@@ -237,14 +235,14 @@ function PhotoStep({ photo, setPhoto, name, setName, bio, setBio, onNext }) {
               width: 30,
               height: 30,
               borderRadius: 15,
-              backgroundColor: Colors.accent,
+              backgroundColor: colors.accent,
               alignItems: "center",
               justifyContent: "center",
               borderWidth: 2,
-              borderColor: Colors.bg,
+              borderColor: colors.bg,
             }}
           >
-            <Ionicons name="add" size={16} color={Colors.textInverse} />
+            <Check size={16} color="#fff" weight="bold" />
           </View>
         </TouchableOpacity>
 
@@ -253,11 +251,11 @@ function PhotoStep({ photo, setPhoto, name, setName, bio, setBio, onNext }) {
           style={{
             fontFamily: Fonts.regular,
             fontSize: 13,
-            color: Colors.textMuted,
+            color: colors.textMuted,
             marginTop: 12,
           }}
         >
-          {photo ? "Tap to change" : "Optional — tap to upload"}
+          {photo ? "Tap to change" : "Tap to upload"}
         </Text>
       </View>
 
@@ -282,6 +280,7 @@ function PhotoStep({ photo, setPhoto, name, setName, bio, setBio, onNext }) {
 
 // ── Step 1: Location ─────────────────────────────────────────────────────────
 function LocationStep({ country, setCountry, city, setCity, onNext, onBack }) {
+  const { colors } = useTheme();
   const [pickerOpen, setPickerOpen] = useState(false);
 
   function handleSelect(c) {
@@ -304,7 +303,7 @@ function LocationStep({ country, setCountry, city, setCity, onNext, onBack }) {
           fontSize: 12,
           letterSpacing: 1.2,
           textTransform: "uppercase",
-          color: Colors.textSecondary,
+          color: colors.textSecondary,
           marginBottom: 10,
         }}
       >
@@ -324,7 +323,7 @@ function LocationStep({ country, setCountry, city, setCity, onNext, onBack }) {
           justifyContent: "space-between",
           paddingVertical: 14,
           borderBottomWidth: 1.5,
-          borderBottomColor: country ? Colors.accent : Colors.border,
+          borderBottomColor: country ? colors.accent : colors.border,
           marginBottom: 24,
         }}
       >
@@ -342,7 +341,7 @@ function LocationStep({ country, setCountry, city, setCity, onNext, onBack }) {
               style={{
                 fontFamily: Fonts.regular,
                 fontSize: 15,
-                color: Colors.textPrimary,
+                color: colors.textPrimary,
               }}
             >
               {country.name}
@@ -354,20 +353,19 @@ function LocationStep({ country, setCountry, city, setCity, onNext, onBack }) {
             style={{
               fontFamily: Fonts.regular,
               fontSize: 15,
-              color: Colors.textMuted,
+              color: colors.textMuted,
             }}
           >
             Select your country
           </Text>
         )}
-        <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
+        <CaretRight size={18} color={colors.textMuted} />
       </TouchableOpacity>
 
       <AuthInput
         label="City"
         value={city}
         onChangeText={setCity}
-        helper="Optional"
       />
 
       <NavRow onNext={onNext} nextLabel="Continue" showBack onBack={onBack} />
@@ -385,7 +383,7 @@ function LocationStep({ country, setCountry, city, setCity, onNext, onBack }) {
             fontFamily: Fonts.friendly,
             fontSize: 13,
             letterSpacing: 0.2,
-            color: Colors.textMuted,
+            color: colors.textMuted,
           }}
         >
           Skip for now
@@ -403,6 +401,7 @@ function LocationStep({ country, setCountry, city, setCity, onNext, onBack }) {
 
 // ── Step 2: Gender ───────────────────────────────────────────────────────────
 function GenderStep({ gender, setGender, onNext, onBack }) {
+  const { colors } = useTheme();
   function handleSelect(g) {
     Haptics.selectionAsync();
     setGender(g);
@@ -432,7 +431,7 @@ function GenderStep({ gender, setGender, onNext, onBack }) {
                 justifyContent: "space-between",
                 paddingVertical: 16,
                 borderBottomWidth: 1,
-                borderBottomColor: Colors.border,
+                borderBottomColor: colors.border,
               }}
             >
               {/* Gender option — Fredoka when active, Inter when inactive.
@@ -442,8 +441,8 @@ function GenderStep({ gender, setGender, onNext, onBack }) {
                   fontFamily: active ? Fonts.friendly : Fonts.regular,
                   fontSize: 15,
                   color: active
-                    ? Colors.textPrimary
-                    : Colors.textSecondary,
+                    ? colors.textPrimary
+                    : colors.textSecondary,
                 }}
               >
                 {g}
@@ -455,7 +454,7 @@ function GenderStep({ gender, setGender, onNext, onBack }) {
                   height: 20,
                   borderRadius: 10,
                   borderWidth: 1.5,
-                  borderColor: active ? Colors.accent : Colors.border,
+                  borderColor: active ? colors.accent : colors.border,
                   alignItems: "center",
                   justifyContent: "center",
                 }}
@@ -466,7 +465,7 @@ function GenderStep({ gender, setGender, onNext, onBack }) {
                       width: 10,
                       height: 10,
                       borderRadius: 5,
-                      backgroundColor: Colors.accent,
+                      backgroundColor: colors.accent,
                     }}
                   />
                 )}
@@ -491,7 +490,7 @@ function GenderStep({ gender, setGender, onNext, onBack }) {
             fontFamily: Fonts.friendly,
             fontSize: 13,
             letterSpacing: 0.2,
-            color: Colors.textMuted,
+            color: colors.textMuted,
           }}
         >
           Skip for now
@@ -509,6 +508,7 @@ function InterestsStep({
   onBack,
   loading,
 }) {
+  const { colors } = useTheme();
   const options = CATEGORIES.filter((c) => c.id !== "all");
   const canFinish = interests.size >= 2;
 
@@ -548,8 +548,8 @@ function InterestsStep({
                 paddingHorizontal: 16,
                 borderRadius: Radius.lg,
                 borderWidth: 1.5,
-                borderColor: active ? Colors.accent : Colors.border,
-                backgroundColor: active ? Colors.accent : "transparent",
+                borderColor: active ? colors.accent : colors.border,
+                backgroundColor: active ? colors.accent : "transparent",
               }}
             >
               {/* Interest pill — Fredoka, matches every other pill in the app */}
@@ -558,17 +558,13 @@ function InterestsStep({
                   fontFamily: Fonts.friendly,
                   fontSize: 14,
                   letterSpacing: 0.2,
-                  color: active ? Colors.textInverse : Colors.textPrimary,
+                  color: active ? colors.textInverse : colors.textPrimary,
                 }}
               >
                 {c.label}
               </Text>
               {active && (
-                <Ionicons
-                  name="checkmark"
-                  size={14}
-                  color={Colors.textInverse}
-                />
+                <Check size={14} color="#fff" weight="bold" />
               )}
             </TouchableOpacity>
           );
@@ -589,6 +585,7 @@ function InterestsStep({
 
 // ── Screen ───────────────────────────────────────────────────────────────────
 export default function CompleteProfileScreen() {
+  const { colors, isDark } = useTheme();
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState("forward");
   const [photo, setPhoto] = useState(null);
@@ -642,8 +639,8 @@ export default function CompleteProfileScreen() {
       : FadeIn.duration(180);
 
   return (
-    <View style={{ flex: 1, backgroundColor: Colors.bg }}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.bg} />
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.bg} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -673,7 +670,7 @@ export default function CompleteProfileScreen() {
                 style={{
                   fontFamily: Fonts.regular,
                   fontSize: 13,
-                  color: Colors.error,
+                  color: colors.error,
                   marginBottom: 16,
                   textAlign: "center",
                 }}

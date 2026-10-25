@@ -7,6 +7,7 @@ export default function AuthLayout() {
       <Stack.Screen name="Register" />
       <Stack.Screen name="ForgotPassword" />
       <Stack.Screen name="OtpVerification" /> 
+      <Stack.Screen name="CompleteProfile" /> 
     </Stack>
   );
 }

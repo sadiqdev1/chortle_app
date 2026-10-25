@@ -1,624 +1,422 @@
-import { Ionicons } from "@expo/vector-icons";
+/**
+ * PostCard — unified feed card.
+ * Phosphor icons, expo-image, follow button, read-more, bottom-sheet comments.
+ */
+import * as Clipboard from "expo-clipboard";
+import * as Haptics from "expo-haptics";
+import { router } from "expo-router";
 import { useState } from "react";
 import {
+  ActivityIndicator,
   Dimensions,
-  Image,
   Modal,
   Pressable,
-  ScrollView,
   Share,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Image } from "expo-image";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  ZoomIn,
+  ZoomOut,
 } from "react-native-reanimated";
-import { Colors, Fonts, REACTIONS, Radius } from "../constants/theme";
+import {
+  Heart,
+  ChatCircle,
+  BookmarkSimple,
+  DotsThree,
+  ShareNetwork,
+  Link,
+  EyeSlash,
+  Flag,
+  Check,
+  Eye,
+  UserPlus,
+  UserMinus,
+  SealCheckIcon,
+} from "phosphor-react-native";
+import { Fonts, Radius } from "../constants/theme";
 import { useBookmarks } from "../context/BookmarksContext";
+import { useAuth } from "../hooks/useAuth";
+import { useTheme } from "../context/ThemeContext";
+import { useToast } from "../context/ToastContext";
+import { useToggleFollow } from "../hooks/useProfile";
 import { formatRelativeDate } from "../utils/formatDate";
+import { reportPost } from "../services/postService";
+import { fmtCount } from "../utils/helpers";
+import { REACTIONS } from "../constants/theme";
+import CommentsSheet from "./CommentsSheet";
+import ImageZoomModal from "./ImageZoomModal";
+
+export { REACTIONS };
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
-function fmtCount(n) {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-  return String(n ?? 0);
+const API_URL2 = process.env.EXPO_PUBLIC_API_URL2;
+
+const REACTION_COLORS = {
+  fire:  "#E9710F",
+  laugh: "#F7B125",
+  skull: "#555555",
+  heart: "#F33E58",
+};
+
+/* ── Reaction picker ──────────────────────────────────────── */
+function ReactionPicker({ visible, onSelect, onClose, colors }) {
+  if (!visible) return null;
+  return (
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
+      <Pressable style={{ flex: 1 }} onPress={onClose}>
+        <View style={{ position: "absolute", bottom: 80, left: 14, flexDirection: "row", gap: 2, backgroundColor: colors.bgElevated, borderRadius: 40, paddingHorizontal: 8, paddingVertical: 6, shadowColor: "#000", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.18, shadowRadius: 16, elevation: 14, borderWidth: 1, borderColor: colors.border }}>
+          {REACTIONS.map((r, i) => (
+            <Animated.View key={r.id} entering={ZoomIn.delay(i * 30).springify().damping(12).stiffness(280)} exiting={ZoomOut.duration(120)}>
+              <Pressable onPress={() => { onSelect(r.id); onClose(); }} style={{ alignItems: "center", paddingHorizontal: 6, paddingVertical: 2 }}>
+                <Text style={{ fontSize: 30 }}>{r.emoji}</Text>
+                <Text style={{ fontFamily: Fonts.regular, fontSize: 9, color: colors.textMuted, marginTop: 2 }}>{r.label}</Text>
+              </Pressable>
+            </Animated.View>
+          ))}
+        </View>
+      </Pressable>
+    </Modal>
+  );
 }
 
-function ReactionBtn({ reaction, count, active, onPress }) {
+/* ── Like button ──────────────────────────────────────────── */
+function LikeButton({ post, colors }) {
+  const { getReactionState, toggleReaction } = useBookmarks();
+  const { active: myReaction, counts: reactionCounts } = getReactionState(post);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const scale = useSharedValue(1);
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
+  const activeReaction = REACTIONS.find((r) => r.id === myReaction);
+  const totalCount = Object.values(reactionCounts).reduce((s, n) => s + (n ?? 0), 0);
+  const reactionColor = myReaction ? (REACTION_COLORS[myReaction] ?? colors.accent) : colors.textSecondary;
+  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
   function handlePress() {
     scale.value = withSpring(1.35, { damping: 5, stiffness: 300 }, () => {
       scale.value = withSpring(1, { damping: 8, stiffness: 260 });
     });
-    onPress();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    toggleReaction(post, "fire");
   }
+
+  return (
+    <>
+      <TouchableOpacity onPress={handlePress} onLongPress={() => { Haptics.selectionAsync(); setPickerOpen(true); }} delayLongPress={380} activeOpacity={0.7} style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 8 }}>
+        {activeReaction
+          ? <Animated.Text style={[{ fontSize: 20 }, animStyle]}>{activeReaction.emoji}</Animated.Text>
+          : <Heart size={22} color={colors.textSecondary} weight="regular" />
+        }
+        <Text style={{ fontFamily: Fonts.semiBold, fontSize: 13, color: myReaction ? reactionColor : colors.textSecondary }}>
+          {totalCount > 0 ? fmtCount(totalCount) : "Like"}
+        </Text>
+      </TouchableOpacity>
+      <ReactionPicker visible={pickerOpen} onSelect={(id) => toggleReaction(post, id)} onClose={() => setPickerOpen(false)} colors={colors} />
+    </>
+  );
+}
+
+/* ── Inline follow button ─────────────────────────────────── */
+function FollowButton({ username, colors }) {
+  const { mutate: toggleFollow, isPending } = useToggleFollow(username);
+  // We don't know is_following from post card — start as "Follow", toggle optimistically
+  const [following, setFollowing] = useState(false);
+
+  function handlePress() {
+    Haptics.selectionAsync();
+    setFollowing((v) => !v);
+    toggleFollow();
+  }
+
+  if (!username) return null;
 
   return (
     <TouchableOpacity
       onPress={handlePress}
-      activeOpacity={0.75}
-      accessibilityRole="button"
-      accessibilityLabel={reaction.id}
+      disabled={isPending}
+      hitSlop={6}
       style={{
-        flex: 1,
         flexDirection: "row",
         alignItems: "center",
-        justifyContent: "center",
-        gap: 5,
-        paddingHorizontal: 8,
-        paddingVertical: 8,
+        gap: 4,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
         borderRadius: Radius.full,
-        backgroundColor: active ? Colors.accentSoft : Colors.bgCard,
         borderWidth: 1.5,
-        borderColor: active ? Colors.accent : Colors.border,
+        borderColor: following ? colors.border : colors.accent,
+        backgroundColor: following ? "transparent" : colors.accent,
       }}
     >
-      <Animated.Text style={[{ fontSize: 16 }, animStyle]}>
-        {reaction.emoji}
-      </Animated.Text>
-      {count > 0 && (
-        <Text
-          style={{
-            fontFamily: Fonts.semiBold,
-            fontSize: 11,
-            letterSpacing: 0.3,
-            color: active ? Colors.accent : Colors.textMuted,
-          }}
-        >
-          {fmtCount(count)}
-        </Text>
-      )}
+
+      <Text style={{ fontFamily: Fonts.semiBold, fontSize: 11, color: following ? colors.textSecondary : "#fff" }}>
+        {following ? "Following" : "Follow"}
+      </Text>
     </TouchableOpacity>
   );
 }
 
-function PostActionsSheet({ visible, onClose, onAction }) {
+/* ── Post actions sheet ───────────────────────────────────── */
+function PostActionsSheet({ visible, onClose, onAction, colors }) {
   const actions = [
-    { id: "save", label: "Save", icon: "bookmark-outline" },
-    { id: "share", label: "Share", icon: "share-outline" },
-    { id: "copy", label: "Copy link", icon: "link-outline" },
-    { id: "hide", label: "Hide this post", icon: "eye-off-outline" },
-    {
-      id: "report",
-      label: "Report",
-      icon: "flag-outline",
-      destructive: true,
-    },
+    { id: "save",   label: "Save meme",     Icon: BookmarkSimple },
+    { id: "share",  label: "Share",          Icon: ShareNetwork },
+    { id: "copy",   label: "Copy link",      Icon: Link },
+    { id: "hide",   label: "Hide this post", Icon: EyeSlash },
+    { id: "report", label: "Report",         Icon: Flag, destructive: true },
   ];
-
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-      statusBarTranslucent
-    >
-      <Pressable
-        onPress={onClose}
-        style={{
-          flex: 1,
-          backgroundColor: "rgba(0,0,0,0.35)",
-          justifyContent: "flex-end",
-        }}
-      >
-        <Pressable
-          onPress={() => {}}
-          style={{
-            backgroundColor: Colors.bg,
-            borderTopLeftRadius: Radius.xxl,
-            borderTopRightRadius: Radius.xxl,
-            paddingTop: 12,
-            paddingBottom: 32,
-            paddingHorizontal: 20,
-          }}
-        >
-          <View
-            style={{
-              alignSelf: "center",
-              width: 40,
-              height: 4,
-              borderRadius: 2,
-              backgroundColor: Colors.border,
-              marginBottom: 16,
-            }}
-          />
-
-          <Text
-            style={{
-              fontFamily: Fonts.friendly,
-              fontSize: 18,
-              letterSpacing: -0.1,
-              color: Colors.textPrimary,
-              marginBottom: 12,
-            }}
-          >
-            Post options
-          </Text>
-
-          {actions.map((a) => (
-            <TouchableOpacity
-              key={a.id}
-              onPress={() => {
-                onAction(a.id);
-                onClose();
-              }}
-              activeOpacity={0.6}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 14,
-                paddingVertical: 14,
-                borderBottomWidth: 1,
-                borderBottomColor: Colors.border,
-              }}
-            >
-              <View
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 12,
-                  backgroundColor: Colors.bgCard,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Ionicons
-                  name={a.icon}
-                  size={18}
-                  color={a.destructive ? Colors.error : Colors.textPrimary}
-                />
-              </View>
-              <Text
-                style={{
-                  fontFamily: Fonts.friendly,
-                  fontSize: 15,
-                  color: a.destructive ? Colors.error : Colors.textPrimary,
-                }}
-              >
-                {a.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }}>
+        <Pressable onPress={() => {}} style={{ backgroundColor: colors.bg, borderTopLeftRadius: Radius.xxl, borderTopRightRadius: Radius.xxl, paddingTop: 12, paddingBottom: 36, paddingHorizontal: 20 }}>
+          <View style={{ alignSelf: "center", width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: 18 }} />
+          {actions.map((a, i) => {
+            const { Icon } = a;
+            const isLast = i === actions.length - 1;
+            return (
+              <TouchableOpacity key={a.id} onPress={() => { onAction(a.id); onClose(); }} activeOpacity={0.6} style={{ flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 14, borderBottomWidth: isLast ? 0 : 1, borderBottomColor: colors.border }}>
+                <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: a.destructive ? colors.error + "18" : colors.bgCard, alignItems: "center", justifyContent: "center" }}>
+                  <Icon size={20} color={a.destructive ? colors.error : colors.textPrimary} weight="duotone" />
+                </View>
+                <Text style={{ fontFamily: Fonts.medium, fontSize: 15, color: a.destructive ? colors.error : colors.textPrimary }}>{a.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </Pressable>
       </Pressable>
     </Modal>
   );
 }
 
-function CommentsSheet({ visible, onClose, commentsCount }) {
+/* ── Report sheet ─────────────────────────────────────────── */
+const REPORT_REASONS = [
+  { id: "Spam", label: "Spam" },
+  { id: "Harassment", label: "Harassment" },
+  { id: "Inappropriate", label: "Inappropriate content" },
+  { id: "Copyright", label: "Copyright violation" },
+  { id: "Other", label: "Other" },
+];
+
+function ReportSheet({ visible, onClose, postSlug }) {
+  const { colors } = useTheme();
+  const { toast } = useToast();
+  const [selected, setSelected] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit() {
+    if (!selected) return;
+    setSubmitting(true);
+    try {
+      await reportPost(postSlug, selected);
+      toast.success("Reported. We'll review this post.");
+      setSelected(null); onClose();
+    } catch (e) {
+      toast.error(e?.response?.data?.message ?? "Couldn't submit report.");
+    } finally { setSubmitting(false); }
+  }
+
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      onRequestClose={onClose}
-      statusBarTranslucent
-    >
-      <View style={{ flex: 1, backgroundColor: Colors.bg }}>
-        <SafeAreaView style={{ flex: 1 }} edges={["top", "bottom"]}>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              paddingHorizontal: 20,
-              paddingVertical: 12,
-              borderBottomWidth: 1,
-              borderBottomColor: Colors.border,
-            }}
-          >
-            <TouchableOpacity onPress={onClose} hitSlop={10}>
-              <View
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
-                  backgroundColor: Colors.bgCard,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Ionicons
-                  name="arrow-back"
-                  size={20}
-                  color={Colors.textPrimary}
-                />
-              </View>
-            </TouchableOpacity>
-
-            <Text
-              style={{
-                fontFamily: Fonts.friendly,
-                fontSize: 20,
-                color: Colors.textPrimary,
-                marginLeft: 14,
-              }}
-            >
-              Comments
-            </Text>
-          </View>
-
-          <ScrollView
-            contentContainerStyle={{
-              flexGrow: 1,
-              justifyContent: "center",
-              paddingHorizontal: 32,
-            }}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={{ alignItems: "center" }}>
-              <View
-                style={{
-                  width: 72,
-                  height: 72,
-                  borderRadius: 24,
-                  backgroundColor: Colors.bgCard,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginBottom: 16,
-                }}
-              >
-                <Ionicons
-                  name="chatbubble-outline"
-                  size={30}
-                  color={Colors.textMuted}
-                />
-              </View>
-
-              <Text
-                style={{
-                  fontFamily: Fonts.friendly,
-                  fontSize: 17,
-                  color: Colors.textPrimary,
-                  marginBottom: 8,
-                  textAlign: "center",
-                }}
-              >
-                {commentsCount === 0
-                  ? "No comments yet"
-                  : `${commentsCount} ${
-                      commentsCount === 1 ? "comment" : "comments"
-                    }`}
-              </Text>
-
-              <Text
-                style={{
-                  fontFamily: Fonts.regular,
-                  fontSize: 15,
-                  lineHeight: 22,
-                  color: Colors.textSecondary,
-                  textAlign: "center",
-                }}
-              >
-                Comments will appear here once the thread is wired up.
-              </Text>
-            </View>
-          </ScrollView>
-        </SafeAreaView>
-      </View>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }}>
+        <Pressable onPress={() => {}} style={{ backgroundColor: colors.bg, borderTopLeftRadius: Radius.xxl, borderTopRightRadius: Radius.xxl, paddingTop: 12, paddingBottom: 40, paddingHorizontal: 20 }}>
+          <View style={{ alignSelf: "center", width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: 18 }} />
+          <Text style={{ fontFamily: Fonts.friendly, fontSize: 20, color: colors.textPrimary, marginBottom: 4 }}>Report post</Text>
+          <Text style={{ fontFamily: Fonts.regular, fontSize: 14, lineHeight: 20, color: colors.textMuted, marginBottom: 20 }}>Why are you reporting this?</Text>
+          {REPORT_REASONS.map((r) => {
+            const active = selected === r.id;
+            return (
+              <TouchableOpacity key={r.id} onPress={() => setSelected(r.id)} activeOpacity={0.7} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14 }}>
+                <Text style={{ fontFamily: active ? Fonts.semiBold : Fonts.regular, fontSize: 15, color: active ? colors.accent : colors.textPrimary }}>{r.label}</Text>
+                <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: active ? colors.accent : colors.border, alignItems: "center", justifyContent: "center" }}>
+                  {active && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent }} />}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+          <TouchableOpacity onPress={handleSubmit} disabled={!selected || submitting} activeOpacity={0.85} style={{ marginTop: 24, height: 52, borderRadius: Radius.full, backgroundColor: selected ? colors.error : colors.bgCard, alignItems: "center", justifyContent: "center" }}>
+            {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ fontFamily: Fonts.semiBold, fontSize: 15, color: selected ? "#fff" : colors.textMuted }}>Submit Report</Text>}
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
 
-export default function PostCard({
-  post,
-  bookmarked,
-  onToggleBookmark,
-  onPress,
-}) {
-  const { getReactionState, toggleReaction } = useBookmarks();
-  const { active: myReaction, counts: reactionCounts } =
-    getReactionState(post);
+/* ── Caption with read-more ───────────────────────────────── */
+function CaptionText({ caption, colors }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = caption.length > 120;
+  return (
+    <View style={{ paddingHorizontal: 14, paddingBottom: 12 }}>
+      <Text numberOfLines={expanded ? undefined : 3} style={{ fontFamily: Fonts.regular, fontSize: 15, lineHeight: 22, color: colors.textPrimary }}>
+        {caption}
+      </Text>
+      {isLong && !expanded && (
+        <TouchableOpacity onPress={() => setExpanded(true)} hitSlop={8}>
+          <Text style={{ fontFamily: Fonts.semiBold, fontSize: 13, color: colors.accent, marginTop: 4 }}>Read more</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
 
+/* ── Post card ────────────────────────────────────────────── */
+export default function PostCard({ post, bookmarked, onToggleBookmark, onPress }) {
+  const { colors } = useTheme();
+  const { toast } = useToast();
+  const { user } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [zoomOpen, setZoomOpen] = useState(false);
 
-  const author = post.creator ?? post.author;
+  const author = post.user ?? post.creator ?? post.author;
   const commentsCount = post.commentsCount ?? post.comments_count ?? 0;
+  // Show follow button only for other users' posts
+  const isOwnPost = user?.id === author?.id || user?.username === author?.username;
+
+  function openAuthorProfile() {
+    if (author?.username) {
+      router.push({ pathname: "/UserProfile", params: { username: author.username } });
+    }
+  }
 
   async function handleAction(actionId) {
     switch (actionId) {
-      case "save":
-        onToggleBookmark?.();
-        break;
-
+      case "save": onToggleBookmark?.(); break;
       case "share":
         try {
           await Share.share({
-            message: post.caption
-              ? `${post.caption}\n\n— via Chortle`
-              : "Check this out on Chortle",
+            message: post.caption ? `${post.caption}\n\nchortle://post/${post.slug}` : "Check this meme on Chortle",
+            url: `https://chortle.app/post/${post.slug}`,
           });
-        } catch (e) {
-          // user dismissed the share sheet
-        }
+        } catch {}
         break;
-
       case "copy":
-        // TODO: wire with expo-clipboard
+        try {
+          await Clipboard.setStringAsync(`chortle://post/${post.slug}`);
+          toast.success("Link copied!");
+        } catch { toast.error("Couldn't copy link."); }
         break;
-
-      case "hide":
-        // TODO: local hide via context
-        break;
-
-      case "report":
-        // TODO: navigate to a report screen, or fire a report API
-        break;
-
-      default:
-        break;
+      case "hide": toast.info("Post hidden."); break;
+      case "report": setReportOpen(true); break;
     }
   }
 
   return (
     <>
-      <TouchableOpacity
-        onPress={onPress}
-        activeOpacity={0.93}
-        style={{
-          width: SCREEN_WIDTH,
-          backgroundColor: Colors.bgElevated,
-          borderBottomWidth: 1,
-          borderBottomColor: Colors.border,
-        }}
-      >
-        {/* Author row */}
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            paddingHorizontal: 14,
-            paddingTop: 14,
-            paddingBottom: 10,
-            gap: 10,
-          }}
-        >
-          {author?.avatar ? (
-            <Image
-              source={{ uri: author.avatar }}
-              style={{ width: 38, height: 38, borderRadius: 19 }}
-            />
-          ) : (
-            <View
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: 19,
-                backgroundColor: Colors.bgCard,
-                alignItems: "center",
-                justifyContent: "center",
-                borderWidth: 1,
-                borderColor: Colors.border,
-              }}
-            >
-              <Ionicons name="person" size={18} color={Colors.textMuted} />
-            </View>
-          )}
+      <View style={{ width: SCREEN_WIDTH, backgroundColor: colors.bgElevated, borderBottomWidth: 1, borderBottomColor: colors.border }}>
 
-          <View style={{ flex: 1 }}>
-            <Text
-              numberOfLines={1}
-              style={{
-                fontFamily: Fonts.friendly,
-                fontSize: 15,
-                color: Colors.textPrimary,
-              }}
-            >
-              {author?.name ?? "Anonymous"}
-            </Text>
-
-            <Text
-              numberOfLines={1}
-              style={{
-                fontFamily: Fonts.regular,
-                fontSize: 11,
-                letterSpacing: 0.4,
-                color: Colors.textMuted,
-                marginTop: 1,
-              }}
-            >
-              {author?.username ? `${author.username} · ` : ""}
-              {formatRelativeDate(post.created_at)}
-            </Text>
-          </View>
-
-          {post.tag ? (
-            <View
-              style={{
-                paddingHorizontal: 10,
-                paddingVertical: 4,
-                borderRadius: Radius.full,
-                backgroundColor: Colors.accentSoft,
-              }}
-            >
-              <Text
-                style={{
-                  fontFamily: Fonts.semiBold,
-                  fontSize: 10,
-                  letterSpacing: 0.8,
-                  color: Colors.accent,
-                }}
-              >
-                {String(post.tag).toUpperCase()}
+        {/* ── Author row ──────────────────────────────────── */}
+        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingTop: 14, paddingBottom: 10 }}>
+          <TouchableOpacity onPress={openAuthorProfile} activeOpacity={0.7} style={{ flexDirection: "row", alignItems: "center", flex: 1, gap: 10 }}>
+            {author?.avatar ? (
+              <Image source={{ uri: author.avatar }} style={{ width: 38, height: 38, borderRadius: 19 }} />
+            ) : (
+              <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: colors.bgCard, alignItems: "center", justifyContent: "center" }}>
+                <Text style={{ fontSize: 18 }}>🐸</Text>
+              </View>
+            )}
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                <Text numberOfLines={1} style={{ fontFamily: Fonts.semiBold, fontSize: 14, color: colors.textPrimary }}>
+                  {author?.name ?? "Anonymous"}
+                </Text>
+                {author?.is_verified && (
+                  <View >
+                    <SealCheckIcon size={18} color={colors.accent}  weight="fill" />
+                  </View>
+                )}
+              </View>
+              <Text numberOfLines={1} style={{ fontFamily: Fonts.regular, fontSize: 11, letterSpacing: 0.2, color: colors.textMuted, marginTop: 1 }}>
+                {author?.username ? `@${author.username} · ` : ""}
+                {formatRelativeDate(post.created_at)}
               </Text>
             </View>
-          ) : null}
+          </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => setMenuOpen(true)}
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityLabel="Post options"
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 10,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Ionicons
-              name="ellipsis-horizontal"
-              size={20}
-              color={Colors.textMuted}
-            />
+          {/* Follow button — shown only for other users */}
+          {!isOwnPost && author?.username && (
+            <FollowButton username={author.username} colors={colors} />
+          )}
+
+          {/* {post.category && (
+            <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: Radius.full, backgroundColor: colors.accentSoft, marginLeft: 6 }}>
+              <Text style={{ fontFamily: Fonts.semiBold, fontSize: 10, letterSpacing: 0.7, color: colors.accent }}>
+                {String(post.category).toUpperCase()}
+              </Text>
+            </View>
+          )} */}
+
+          <TouchableOpacity onPress={() => setMenuOpen(true)} hitSlop={12} style={{ width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center", marginLeft: 4 }}>
+            <DotsThree size={22} color={colors.textMuted} weight="bold" />
           </TouchableOpacity>
         </View>
 
         {/* Caption */}
-        {post.caption ? (
-          <Text
-            numberOfLines={3}
-            style={{
-              fontFamily: Fonts.regular,
-              fontSize: 15,
-              lineHeight: 22,
-              color: Colors.textPrimary,
-              paddingHorizontal: 14,
-              paddingBottom: 12,
-            }}
-          >
-            {post.caption}
-          </Text>
-        ) : null}
+        {post.caption ? <CaptionText caption={post.caption} colors={colors} /> : null}
 
-        {/* Media — full width */}
-        {post.mediaUrl ? (
-          <Image
-            source={{ uri: post.mediaUrl }}
-            style={{
-              width: "100%",
-              height: SCREEN_WIDTH,
-              maxHeight: 480,
-            }}
-            resizeMode="cover"
-          />
-        ) : (
-          <View
-            style={{
-              width: "100%",
-              height: 200,
-              backgroundColor: Colors.bgCard,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Ionicons
-              name="image-outline"
-              size={28}
-              color={Colors.textMuted}
+        {/* Media */}
+        <TouchableOpacity activeOpacity={0.97} onPress={() => setZoomOpen(true)} onLongPress={onPress} delayLongPress={400}>
+          {post.image_url ? (
+            <Image
+              source={API_URL2+ post.image_url}
+              style={{ width: "100%", aspectRatio: post.aspect_ratio ?? 1, backgroundColor: colors.bgCard }}
+              contentFit="cover"
+              transition={200}
+              placeholder={{ blurhash: "L6PZfSi_.AyE_3t7t7R**0o#DgR4" }}
             />
-          </View>
-        )}
+          ) : (
+            <View style={{ width: "100%", aspectRatio: 1, backgroundColor: colors.bgCard, alignItems: "center", justifyContent: "center" }}>
+              <Text style={{ fontSize: 48 }}>🐸</Text>
+            </View>
+          )}
+        </TouchableOpacity>
 
-        {/* Reactions — one row, evenly split */}
-        <View
-          style={{
-            flexDirection: "row",
-            gap: 8,
-            paddingHorizontal: 14,
-            paddingTop: 12,
-          }}
-        >
-          {REACTIONS.map((r) => (
-            <ReactionBtn
-              key={r.id}
-              reaction={r}
-              count={reactionCounts[r.id] ?? post.reactions?.[r.id] ?? 0}
-              active={myReaction === r.id}
-              onPress={() => toggleReaction(post, r.id)}
-            />
-          ))}
-        </View>
+        {/* Engagement bar */}
+        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 4, paddingVertical: 4 }}>
+          <LikeButton post={post} colors={colors} />
 
-        {/* Action bar */}
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "flex-end",
-            gap: 8,
-            paddingHorizontal: 14,
-            paddingTop: 10,
-            paddingBottom: 12,
-          }}
-        >
-          <TouchableOpacity
-            onPress={() => setCommentsOpen(true)}
-            activeOpacity={0.7}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 5,
-              paddingHorizontal: 10,
-              paddingVertical: 7,
-              borderRadius: Radius.full,
-              backgroundColor: Colors.bgCard,
-              borderWidth: 1,
-              borderColor: Colors.border,
-            }}
-          >
-            <Ionicons
-              name="chatbubble-outline"
-              size={15}
-              color={Colors.textSecondary}
-            />
-            <Text
-              style={{
-                fontFamily: Fonts.semiBold,
-                fontSize: 12,
-                letterSpacing: 0.3,
-                color: Colors.textSecondary,
-              }}
-            >
-              {fmtCount(commentsCount)}
+          <TouchableOpacity onPress={() => setCommentsOpen(true)} activeOpacity={0.7} style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 8 }}>
+            <ChatCircle size={22} color={colors.textSecondary} weight="regular" />
+            <Text style={{ fontFamily: Fonts.semiBold, fontSize: 13, color: colors.textSecondary }}>
+              {commentsCount > 0 ? fmtCount(commentsCount) : "Comment"}
             </Text>
           </TouchableOpacity>
 
+          {post.views_count > 0 && (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8 }}>
+              <Eye size={16} color={colors.textMuted} weight="regular" />
+              <Text style={{ fontFamily: Fonts.regular, fontSize: 12, color: colors.textMuted }}>
+                {fmtCount(post.views_count)}
+              </Text>
+            </View>
+          )}
+
+          <View style={{ flex: 1 }} />
+
+          <TouchableOpacity onPress={() => { Haptics.selectionAsync(); onToggleBookmark?.(); }} hitSlop={10} style={{ paddingHorizontal: 10, paddingVertical: 8 }}>
+            <BookmarkSimple size={22} color={bookmarked ? colors.accent : colors.textSecondary} weight={bookmarked ? "fill" : "regular"} />
+          </TouchableOpacity>  
+
           <TouchableOpacity
-            onPress={onToggleBookmark}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: Radius.md,
-              backgroundColor: bookmarked
-                ? Colors.accentSoft
-                : Colors.bgCard,
-              borderWidth: 1,
-              borderColor: bookmarked ? Colors.accent : Colors.border,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+            onPress={async () => { try { await Share.share({ message: post.slug ? `${post.slug}` : "Check this out on Chortle" }); } catch {} }}
+            hitSlop={10}
+            style={{ paddingHorizontal: 10, paddingVertical: 8 }}
           >
-            <Ionicons
-              name={bookmarked ? "bookmark" : "bookmark-outline"}
-              size={16}
-              color={bookmarked ? Colors.accent : Colors.textMuted}
-            />
+            <ShareNetwork size={22} color={colors.textSecondary} weight="regular" />
           </TouchableOpacity>
         </View>
-      </TouchableOpacity>
+      </View>
 
-      <PostActionsSheet
-        visible={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        onAction={handleAction}
-      />
-      <CommentsSheet
-        visible={commentsOpen}
-        onClose={() => setCommentsOpen(false)}
-        commentsCount={commentsCount}
-      />
+      <PostActionsSheet visible={menuOpen} onClose={() => setMenuOpen(false)} onAction={handleAction} colors={colors} />
+      <CommentsSheet visible={commentsOpen} onClose={() => setCommentsOpen(false)} post={post} />
+      <ReportSheet visible={reportOpen} onClose={() => setReportOpen(false)} postSlug={post.slug} />
+      <ImageZoomModal visible={zoomOpen} imageUrl={post.image_url} onClose={() => setZoomOpen(false)} />
     </>
   );
 }

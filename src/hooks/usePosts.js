@@ -1,4 +1,5 @@
 import {
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
@@ -12,14 +13,22 @@ import {
   deletePost,
 } from "../services/postService";
 
+/**
+ * Infinite-scroll feed using cursor pagination.
+ * The backend returns { data: [], next_cursor, next_page_url, ... }
+ */
 export function usePosts(params = {}) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ["posts", params],
-    queryFn: () => getPosts(params),
+    queryFn: ({ pageParam }) =>
+      getPosts({ ...params, cursor: pageParam }),
+    initialPageParam: undefined,
+    getNextPageParam: (lastPage) =>
+      lastPage?.next_cursor ?? undefined,
   });
 }
 
-export function usePost(slug) {
+export function usePost(slug) { 
   return useQuery({
     queryKey: ["posts", slug],
     queryFn: () => getPost(slug),
