@@ -325,6 +325,8 @@ export default function UserProfileScreen() {
         active={activeTab}
         onChange={setActiveTab}
         colors={colors}
+        
+        memesCount={profile.memes_count ?? memes.length}
       />
 
       {/* About tab content (inline) */}

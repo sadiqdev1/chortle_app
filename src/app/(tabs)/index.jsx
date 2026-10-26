@@ -131,14 +131,44 @@ function FilterSheet({ visible, onClose, categories, selected, onSelect, onClear
 }
 
 /* ── Suggested creators card ──────────────────────────────── */
+
 function SuggestedCreatorCard({ creator, colors }) {
-  const { mutate: toggleFollow, isPending } = useToggleFollow(creator?.username);
+  const {
+    mutate: toggleFollow,
+    isPending,
+  } = useToggleFollow(creator?.username);
+
+  const [following, setFollowing] = useState(
+    Boolean(creator?.is_following)
+  );
+
+  useEffect(() => {
+    setFollowing(Boolean(creator?.is_following));
+  }, [creator?.is_following, creator?.username]);
 
   if (!creator?.username) return null;
 
+  function handleFollowPress(event) {
+    event?.stopPropagation?.();
+
+    if (isPending) return;
+
+    const previous = following;
+    setFollowing(!previous);
+
+    toggleFollow(undefined, {
+      onError: () => setFollowing(previous),
+    });
+  }
+
   return (
     <TouchableOpacity
-      onPress={() => router.push({ pathname: "/UserProfile", params: { username: creator.username } })}
+      onPress={() =>
+        router.push({
+          pathname: "/UserProfile",
+          params: { username: creator.username },
+        })
+      }
       activeOpacity={0.85}
       style={{
         width: 140,
@@ -152,32 +182,82 @@ function SuggestedCreatorCard({ creator, colors }) {
       }}
     >
       {creator.avatar ? (
-        <Image source={{ uri: creator.avatar }} style={{ width: 52, height: 52, borderRadius: 26, marginBottom: 8 }} />
+        <Image
+          source={{ uri: creator.avatar }}
+          style={{
+            width: 52,
+            height: 52,
+            borderRadius: 26,
+            marginBottom: 8,
+          }}
+        />
       ) : (
-        <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
+        <View
+          style={{
+            width: 52,
+            height: 52,
+            borderRadius: 26,
+            backgroundColor: colors.surface,
+            alignItems: "center",
+            justifyContent: "center",
+            marginBottom: 8,
+          }}
+        >
           <Text style={{ fontSize: 24 }}>🐸</Text>
         </View>
       )}
-      <Text numberOfLines={1} style={{ fontFamily: Fonts.semiBold, fontSize: 13, color: colors.textPrimary, marginBottom: 2 }}>
+
+      <Text
+        numberOfLines={1}
+        style={{
+          fontFamily: Fonts.semiBold,
+          fontSize: 13,
+          color: colors.textPrimary,
+          marginBottom: 2,
+        }}
+      >
         {creator.name}
       </Text>
-      <Text numberOfLines={1} style={{ fontFamily: Fonts.regular, fontSize: 11, color: colors.textMuted, marginBottom: 10 }}>
+
+      <Text
+        numberOfLines={1}
+        style={{
+          fontFamily: Fonts.regular,
+          fontSize: 11,
+          color: colors.textMuted,
+          marginBottom: 10,
+        }}
+      >
         @{creator.username}
       </Text>
+
       <TouchableOpacity
-        onPress={(e) => { e.stopPropagation?.(); toggleFollow(); }}
+        onPress={handleFollowPress}
         disabled={isPending}
         style={{
           paddingHorizontal: 16,
           paddingVertical: 7,
           borderRadius: Radius.full,
-          backgroundColor: creator.is_following ? "transparent" : colors.accent,
+          backgroundColor: following
+            ? "transparent"
+            : colors.accent,
           borderWidth: 1.5,
-          borderColor: creator.is_following ? colors.border : colors.accent,
+          borderColor: following
+            ? colors.border
+            : colors.accent,
+          opacity: isPending ? 0.65 : 1,
         }}
       >
-        <Text style={{ fontFamily: Fonts.semiBold, fontSize: 12, color: creator.is_following ? colors.textSecondary : "#fff" }}>
-          {creator.is_following ? "Following" : "Follow"}
+        <Text
+          style={{
+            fontFamily: Fonts.semiBold,
+            fontSize: 12,
+            color: following
+              ? colors.textSecondary
+              : "#fff",
+          }}
+        >
+          {following ? "Following" : "Follow"}
         </Text>
       </TouchableOpacity>
     </TouchableOpacity>
@@ -219,7 +299,7 @@ export default function HomeScreen() {
   const [filterOpen, setFilterOpen] = useState(false);
 
   const { user } = useAuth();
-  const { isBookmarked, toggleBookmark } = useBookmarks();
+const { isBookmarked, toggleBookmark } = useBookmarks();
   const { colors, isDark } = useTheme();
 
   const { data: rawNotifData } = useNotifications();
@@ -400,13 +480,18 @@ export default function HomeScreen() {
             : EmptyState
         }
         renderItem={({ item: post }) => (
-          <PostCard
-            post={post}
-            bookmarked={post.isBookmarked}
-            onToggleBookmark={() => toggleBookmark(post)}
-            onPress={() => router.push({ pathname: "/PostView", params: { slug: post.slug } })}
-          />
-        )}
+  <PostCard
+    post={post}
+    bookmarked={isBookmarked(post.id)}
+    onToggleBookmark={() => toggleBookmark(post)}
+    onPress={() =>
+      router.push({
+        pathname: "/PostView",
+        params: { slug: post.slug },
+      })
+    }
+  />
+)}
       />
 
       <FilterSheet

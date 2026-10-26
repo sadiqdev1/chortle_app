@@ -1,3 +1,4 @@
+
 import {
   createContext,
   useCallback,
@@ -7,186 +8,304 @@ import {
   useRef,
   useState,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { getBookmarks } from "../services/bookmarkService";
-import { toggleBookmarkApi, toggleLikeApi } from "../services/postService";
+import {
+  toggleBookmarkApi,
+  toggleLikeApi,
+} from "../services/postService";
 
 const BookmarksContext = createContext(null);
 
-export function BookmarksProvider({ children }) {
-  // bookmarkMap: { [postId]: postObject | true }
-  // Storing the full post object so the Saved tab can render without an API call.
-  const [bookmarkMap, setBookmarkMap] = useState({});
+function normalizeReactionCounts(reactions) {
+  if (Array.isArray(reactions)) {
+    return reactions.reduce((counts, reaction) => {
+      if (typeof reaction === "string") {
+        counts[reaction] = (counts[reaction] ?? 0) + 1;
+      } else if (reaction?.type) {
+        counts[reaction.type] =
+          Number(reaction.count ?? reaction.counts ?? 1);
+      }
 
-  // reactionMap: { [postId]: { active: reactionId | null, counts: { [reactionId]: number } } }
+      return counts;
+    }, {});
+  }
+
+  if (reactions && typeof reactions === "object") {
+    return Object.fromEntries(
+      Object.entries(reactions).map(([type, count]) => [
+        type,
+        Number(count) || 0,
+      ])
+    );
+  }
+
+  return {};
+}
+
+export function BookmarksProvider({ children }) {
+  const queryClient = useQueryClient();
+
+  const [bookmarkMap, setBookmarkMap] = useState({});
   const [reactionMap, setReactionMap] = useState({});
 
-  // Prevent double-tapping from firing concurrent API calls for the same post
   const bookmarkInFlight = useRef({});
+  const reactionInFlight = useRef({});
 
-  // ── Seed bookmarks from API on mount ────────────────────
+  // Load saved posts using Laravel's page-based pagination.
   useEffect(() => {
-    let cursor = undefined;
     let active = true;
 
-    async function fetchAll() {
+    async function fetchBookmarks() {
       try {
-        // Fetch up to first 3 pages (45 bookmarks) on mount — enough for the Saved tab
-        for (let i = 0; i < 3; i++) {
-          const data = await getBookmarks(cursor ? { cursor } : {});
+        for (let page = 1; page <= 3; page += 1) {
+          const response = await getBookmarks({ page });
+
           if (!active) return;
 
-          const memes = data?.data ?? [];
-          if (!Array.isArray(memes) || memes.length === 0) break;
+          const memes = response?.data ?? [];
 
-          setBookmarkMap((prev) => {
-            const seeded = { ...prev };
+          if (!Array.isArray(memes) || memes.length === 0) {
+            break;
+          }
+
+          setBookmarkMap((previous) => {
+            const next = { ...previous };
+
             memes.forEach((meme) => {
-              if (meme?.id && !seeded[meme.id]) {
-                seeded[meme.id] = meme;
+              if (meme?.id != null) {
+                const id = String(meme.id);
+
+                // Do not overwrite a newer local bookmark action.
+                if (!bookmarkInFlight.current[id]) {
+                  next[id] = meme;
+                }
               }
             });
-            return seeded;
+
+            return next;
           });
 
-          cursor = data?.next_cursor;
-          if (!cursor) break;
+          const currentPage = Number(response?.current_page ?? page);
+          const lastPage = Number(response?.last_page ?? currentPage);
+
+          if (currentPage >= lastPage) break;
         }
       } catch {
-        // Unauthenticated or network error — silent fail
+        // Keep the app usable if bookmarks cannot be loaded.
       }
     }
 
-    fetchAll();
-    return () => { active = false; };
+    fetchBookmarks();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
-  // Prevent double-tapping from firing concurrent API calls for the same post
-  const reactionInFlight = useRef({});
+  // ── Bookmarks ──────────────────────────────────────────
 
-  // ── Bookmarks ────────────────────────────────────────────
+  const toggleBookmark = useCallback(
+    async (post) => {
+      const rawId = typeof post === "object" ? post?.id : post;
 
-  /**
-   * Optimistically toggles a bookmark locally then persists to the API.
-   * Rolls back on failure. Accepts a full post object or just an id.
-   */
-  const toggleBookmark = useCallback((post) => {
-    const rawId = typeof post === "object" ? post.id : post;
-    const id   = String(rawId);  // always string key
-    const slug = typeof post === "object" ? (post.slug ?? rawId) : post;
-    const obj  = typeof post === "object" ? post : null;
+      if (rawId == null) return;
 
-    if (bookmarkInFlight.current[id]) return;
-    bookmarkInFlight.current[id] = true;
+      const id = String(rawId);
+      const slug =
+        typeof post === "object" ? (post.slug ?? rawId) : rawId;
+      const postObject = typeof post === "object" ? post : null;
 
-    let previous;
-    setBookmarkMap((prev) => {
-      previous = prev;
-      if (prev[id]) {
-        const next = { ...prev };
-        delete next[id];
+      if (bookmarkInFlight.current[id]) return;
+
+      bookmarkInFlight.current[id] = true;
+
+      let previousValue;
+      let wasBookmarked;
+
+      setBookmarkMap((previous) => {
+        previousValue = previous[id];
+        wasBookmarked = Boolean(previousValue);
+
+        const next = { ...previous };
+
+        if (wasBookmarked) {
+          delete next[id];
+        } else {
+          next[id] = postObject ?? true;
+        }
+
         return next;
-      }
-      return { ...prev, [id]: obj ?? true };
-    });
+      });
 
-    toggleBookmarkApi(slug)
-      .catch(() => { setBookmarkMap(previous); })
-      .finally(() => { delete bookmarkInFlight.current[id]; });
-  }, []);
+      try {
+        const result = await toggleBookmarkApi(slug);
+
+        // Trust the server's confirmed bookmark state.
+        if (typeof result?.bookmarked === "boolean") {
+          setBookmarkMap((previous) => {
+            const next = { ...previous };
+
+            if (result.bookmarked) {
+              next[id] = postObject ?? previousValue ?? true;
+            } else {
+              delete next[id];
+            }
+
+            return next;
+          });
+        }
+
+        await queryClient.invalidateQueries({
+          queryKey: ["posts"],
+        });
+      } catch {
+        // Roll back this post only.
+        setBookmarkMap((previous) => {
+          const next = { ...previous };
+
+          if (wasBookmarked) {
+            next[id] = previousValue;
+          } else {
+            delete next[id];
+          }
+
+          return next;
+        });
+      } finally {
+        delete bookmarkInFlight.current[id];
+      }
+    },
+    [queryClient]
+  );
 
   const isBookmarked = useCallback(
-    // Coerce to string — API returns numeric ids, JS object keys are strings
-    (id) => Boolean(bookmarkMap[String(id)]),
+    (id) => id != null && Boolean(bookmarkMap[String(id)]),
     [bookmarkMap]
   );
 
   const savedPosts = useMemo(
-    () => Object.values(bookmarkMap).filter((v) => v && typeof v === "object"),
+    () =>
+      Object.values(bookmarkMap).filter(
+        (post) => post && typeof post === "object"
+      ),
     [bookmarkMap]
   );
 
   const bookmarks = useMemo(
-    () => Object.fromEntries(Object.keys(bookmarkMap).map((id) => [id, true])),
+    () =>
+      Object.fromEntries(
+        Object.keys(bookmarkMap).map((id) => [id, true])
+      ),
     [bookmarkMap]
   );
 
-  // ── Reactions ────────────────────────────────────────────
+  // ── Reactions ──────────────────────────────────────────
 
-  /**
-   * Returns { active: string|null, counts: { [id]: number } } for a post.
-   * Falls back to the post's own reaction counts when no local override exists.
-   */
   const getReactionState = useCallback(
     (post) => {
       const id = post?.id;
-      const local = reactionMap[id];
-      const baseCounts = post?.reactions ?? {};
-      if (!local) {
-        return { active: null, counts: { ...baseCounts } };
+
+      if (id == null) {
+        return { active: null, counts: {} };
       }
+
+      const key = String(id);
+      const local = reactionMap[key];
+
+      if (local) {
+        return {
+          active: local.active,
+          counts: { ...local.counts },
+        };
+      }
+
       return {
-        active: local.active ?? null,
-        counts: { ...baseCounts, ...local.counts },
+        active: post?.my_reaction ?? null,
+        counts: normalizeReactionCounts(post?.reactions),
       };
     },
     [reactionMap]
   );
 
-  /**
-   * Optimistically toggles a reaction locally then persists to the API.
-   * Single-select: tapping the same reaction again un-reacts.
-   * Rolls back on failure.
-   */
-  const toggleReaction = useCallback((post, reactionId) => {
-    const id = post?.id;
-    if (!id) return;
+  const toggleReaction = useCallback(
+    async (post, reactionId) => {
+      if (post?.id == null || !reactionId) return;
 
-    // Debounce concurrent taps on the same post
-    if (reactionInFlight.current[id]) return;
-    reactionInFlight.current[id] = true;
+      const id = String(post.id);
 
-    let previous;
+      if (reactionInFlight.current[id]) return;
 
-    setReactionMap((prev) => {
-      previous = prev;
+      reactionInFlight.current[id] = true;
 
-      const current = prev[id] ?? { active: null, counts: {} };
-      const baseCounts = post?.reactions ?? {};
-      const merged = { ...baseCounts, ...current.counts };
+      const previousLocal = reactionMap[id];
+      const current = getReactionState(post);
 
-      const wasActive = current.active === reactionId;
-      const newActive = wasActive ? null : reactionId;
+      const newActive =
+        current.active === reactionId ? null : reactionId;
 
-      const newCounts = { ...merged };
-      if (wasActive) {
-        newCounts[reactionId] = Math.max(0, (newCounts[reactionId] ?? 0) - 1);
-      } else {
-        if (current.active) {
-          newCounts[current.active] = Math.max(
-            0,
-            (newCounts[current.active] ?? 0) - 1
-          );
-        }
-        newCounts[reactionId] = (newCounts[reactionId] ?? 0) + 1;
+      const nextCounts = { ...current.counts };
+
+      if (current.active) {
+        nextCounts[current.active] = Math.max(
+          0,
+          (nextCounts[current.active] ?? 0) - 1
+        );
       }
 
-      return {
-        ...prev,
-        [id]: { active: newActive, counts: newCounts },
-      };
-    });
+      if (newActive) {
+        nextCounts[newActive] = (nextCounts[newActive] ?? 0) + 1;
+      }
 
-    // Persist to API — backend uses the meme's numeric id for /memes/{meme}/like
-    toggleLikeApi(id, reactionId)
-      .catch(() => {
-        // Rollback on failure
-        setReactionMap(previous);
-      })
-      .finally(() => {
+      // Optimistic update for immediate feedback.
+      setReactionMap((previous) => ({
+        ...previous,
+        [id]: {
+          active: newActive,
+          counts: nextCounts,
+        },
+      }));
+
+      try {
+        await toggleLikeApi(post.id, reactionId);
+      } catch {
+        // Roll back only this post's reaction.
+        setReactionMap((previous) => {
+          const next = { ...previous };
+
+          if (previousLocal) {
+            next[id] = previousLocal;
+          } else {
+            delete next[id];
+          }
+
+          return next;
+        });
+
+        return;
+      } finally {
         delete reactionInFlight.current[id];
-      });
-  }, []);
+      }
+
+      // The API returns total reaction count, not per-type counts.
+      // Refetch the feed to get authoritative counts and my_reaction.
+      try {
+        await queryClient.invalidateQueries({
+          queryKey: ["posts"],
+        });
+
+        setReactionMap((previous) => {
+          const next = { ...previous };
+          delete next[id];
+          return next;
+        });
+      } catch {
+        // Keep the optimistic state if refreshing the feed fails.
+      }
+    },
+    [getReactionState, queryClient, reactionMap]
+  );
 
   const value = useMemo(
     () => ({
@@ -217,8 +336,13 @@ export function BookmarksProvider({ children }) {
 }
 
 export function useBookmarks() {
-  const ctx = useContext(BookmarksContext);
-  if (!ctx)
-    throw new Error("useBookmarks must be used within a BookmarksProvider");
-  return ctx;
+  const context = useContext(BookmarksContext);
+
+  if (!context) {
+    throw new Error(
+      "useBookmarks must be used within a BookmarksProvider"
+    );
+  }
+
+  return context;
 }

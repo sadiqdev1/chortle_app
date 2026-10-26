@@ -1,3 +1,4 @@
+
 import {
   useInfiniteQuery,
   useMutation,
@@ -13,24 +14,23 @@ import {
   deletePost,
 } from "../services/postService";
 
-/**
- * Infinite-scroll feed using cursor pagination.
- * The backend returns { data: [], next_cursor, next_page_url, ... }
- */
 export function usePosts(params = {}) {
   return useInfiniteQuery({
     queryKey: ["posts", params],
     queryFn: ({ pageParam }) =>
-      getPosts({ ...params, cursor: pageParam }),
+      getPosts({
+        ...params,
+        ...(pageParam ? { cursor: pageParam } : {}),
+      }),
     initialPageParam: undefined,
     getNextPageParam: (lastPage) =>
-      lastPage?.next_cursor ?? undefined,
+      lastPage?.meta?.next_cursor ?? undefined,
   });
 }
 
-export function usePost(slug) { 
+export function usePost(slug) {
   return useQuery({
-    queryKey: ["posts", slug],
+    queryKey: ["post", slug],
     queryFn: () => getPost(slug),
     enabled: Boolean(slug),
   });
@@ -41,12 +41,8 @@ export function useCreatePost() {
 
   return useMutation({
     mutationFn: createPost,
-
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["posts"],
-      });
-    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["posts"] }),
   });
 }
 
@@ -54,17 +50,12 @@ export function useUpdatePost() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ slug, data }) =>
-      updatePost(slug, data),
-
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: ["posts"],
-      });
-
-      queryClient.invalidateQueries({
-        queryKey: ["posts", variables.slug],
-      });
+    mutationFn: ({ slug, data }) => updatePost(slug, data),
+    onSuccess: async (_, { slug }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["posts"] }),
+        queryClient.invalidateQueries({ queryKey: ["post", slug] }),
+      ]);
     },
   });
 }
@@ -74,15 +65,9 @@ export function useDeletePost() {
 
   return useMutation({
     mutationFn: deletePost,
-
-    onSuccess: (_, slug) => {
-      queryClient.invalidateQueries({
-        queryKey: ["posts"],
-      });
-
-      queryClient.removeQueries({
-        queryKey: ["posts", slug],
-      });
+    onSuccess: async (_, slug) => {
+      queryClient.removeQueries({ queryKey: ["post", slug] });
+      await queryClient.invalidateQueries({ queryKey: ["posts"] });
     },
   });
 }
