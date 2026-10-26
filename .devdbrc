@@ -1,0 +1,6 @@
+[
+  {
+    "type": "sqlite",
+    "path": "/opt/lampp/htdocs/chortle_app/backend/database/database.sqlite"
+  }
+]
